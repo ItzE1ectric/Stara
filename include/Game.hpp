@@ -19,6 +19,7 @@ namespace Stara::Game {
     typedef void (*il2cpp_field_get_value_t)(void* obj, void* field, void* value);
     typedef void* (*il2cpp_class_get_method_from_name_t)(void* klass, const char* name, int argsCount);
     typedef void* (*il2cpp_runtime_invoke_t)(void* method, void* obj, void** params, void** exc);
+    typedef void* (*il2cpp_thread_attach_t)(void* domain);
 
     // Globals
     inline uintptr_t gameAssembly = 0;
@@ -51,6 +52,7 @@ namespace Stara::Game {
     inline il2cpp_field_get_value_t il2cpp_field_get_value;
     inline il2cpp_class_get_method_from_name_t il2cpp_class_get_method_from_name;
     inline il2cpp_runtime_invoke_t il2cpp_runtime_invoke;
+    inline il2cpp_thread_attach_t il2cpp_thread_attach;
 
     // Class Pointers
     namespace PlayerControl { inline void* klass = nullptr; }
