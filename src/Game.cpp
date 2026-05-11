@@ -218,8 +218,8 @@ void CompleteAllTasks() {
             for (int i = 0; i < list->size; i++) {
                 void* t = arr->m_Items[i];
                 if (t) { 
-                    uint32_t taskId = *(uint32_t*)((uintptr_t)t + 0x14); // PlayerTask.Id is at 0x14
-                    void* p[1] = { &taskId }; 
+                    uint32_t taskIdx = *(uint32_t*)((uintptr_t)t + 0x10); // PlayerTask.Index is at 0x10
+                    void* p[1] = { &taskIdx }; 
                     il2cpp_runtime_invoke(method, lp, p, nullptr); 
                 }
             }

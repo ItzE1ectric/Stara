@@ -190,7 +190,11 @@ static void TabESP() {
             for (const auto& p : Game::players) {
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
-                ImGui::Text("%s", p.name.c_str());
+                if (p.isImpostor) {
+                    ImGui::TextColored({1, 0.1f, 0.1f, 1}, "%s [IMP]", p.name.c_str());
+                } else {
+                    ImGui::Text("%s", p.name.c_str());
+                }
                 
                 ImGui::TableNextColumn();
                 if (p.isImpostor) {
