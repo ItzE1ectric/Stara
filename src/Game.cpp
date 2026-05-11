@@ -13,6 +13,13 @@ namespace Stara::Game {
 static void* gameDomain = nullptr;
 static bool threadAttached = false;
 
+void Attach() {
+    if (gameDomain && il2cpp_thread_attach && !threadAttached) {
+        il2cpp_thread_attach(gameDomain);
+        threadAttached = true;
+    }
+}
+
 bool Init() {
     printf("[*] Stara: Starting Initialization...\n");
     gameAssembly = (uintptr_t)GetModuleHandleA("GameAssembly.dll");
@@ -65,13 +72,6 @@ bool Init() {
 
     printf("[-] Stara: Failed to find core game classes.\n");
     return false;
-}
-
-void Attach() {
-    if (gameDomain && il2cpp_thread_attach && !threadAttached) {
-        il2cpp_thread_attach(gameDomain);
-        threadAttached = true;
-    }
 }
 
 void* GetLocalPlayer() {
