@@ -94,4 +94,11 @@ extern float g_accentCol[4], g_playerCol[4];
 extern char g_nameBuf[64];
 extern int g_hat, g_pet, g_skin, g_trail, g_emote, g_rarity;
 
+// New feature toggles
+extern bool g_noKillCd, g_infiniteEmergencies, g_alwaysMoveable, g_impostorVision;
+extern bool g_maxReportDist, g_autoTasks, g_freezeAll, g_colorCycle;
+extern bool g_antiKick, g_forceProtect, g_spamAnim, g_godmode;
+extern float g_customDiscussTime, g_customVoteTime;
+extern char g_chatBuf[128];
+
 } // namespace Stara

@@ -32,6 +32,12 @@ float g_accentCol[4] = {0, 0.86f, 1, 1};
 char g_nameBuf[64] = "Stara";
 float g_playerCol[4] = {0, 0.86f, 1, 1};
 int g_hat = 0, g_pet = 0, g_skin = 0, g_trail = 0, g_emote = 0, g_rarity = 0;
+// New feature globals
+bool g_noKillCd = false, g_infiniteEmergencies = false, g_alwaysMoveable = false, g_impostorVision = false;
+bool g_maxReportDist = false, g_autoTasks = false, g_freezeAll = false, g_colorCycle = false;
+bool g_antiKick = false, g_forceProtect = false, g_spamAnim = false, g_godmode = false;
+float g_customDiscussTime = 15.f, g_customVoteTime = 120.f;
+char g_chatBuf[128] = "Stara Client";
 static float g_hue = 0.f;
 
 static ImVec4 Accent() {
@@ -196,6 +202,8 @@ static void TabPlayer() {
   EndCard();
 
   Card("Combat");
+  Toggle("No Kill Cooldown", &g_noKillCd);
+  Toggle("God Mode (Anti-Death)", &g_godmode);
   Slider("Kill Cooldown##op", &g_killCd, 0.f, 60.f);
   if (ImGui::IsItemDeactivatedAfterEdit())
     Game::SetKillCooldown(g_killCd);
@@ -207,6 +215,36 @@ static void TabPlayer() {
     Game::SetWallhack(g_wallhack);
   EndCard();
 
+  Card("Cheats");
+  Toggle("Infinite Emergencies", &g_infiniteEmergencies);
+  Toggle("Always Moveable", &g_alwaysMoveable);
+  Toggle("Impostor Vision", &g_impostorVision);
+  Toggle("Max Report Distance", &g_maxReportDist);
+  Toggle("Auto Complete Tasks", &g_autoTasks);
+  Toggle("Force Shield (GA)", &g_forceProtect);
+  Toggle("Freeze All Players", &g_freezeAll);
+  EndCard();
+
+  Card("Lobby Settings");
+  Slider("Discussion Time##ls", &g_customDiscussTime, 0.f, 120.f);
+  if (ImGui::IsItemDeactivatedAfterEdit())
+    Game::SetDiscussionTime(g_customDiscussTime);
+  Slider("Voting Time##ls", &g_customVoteTime, 0.f, 300.f);
+  if (ImGui::IsItemDeactivatedAfterEdit())
+    Game::SetVotingTime(g_customVoteTime);
+  static int g_emergCount = 9;
+  ImGui::InputInt("Emergencies##ls", &g_emergCount);
+  if (ImGui::IsItemDeactivatedAfterEdit())
+    Game::SetEmergencyCount(g_emergCount);
+  EndCard();
+
+  Card("Chat");
+  ImGui::InputText("Message##chat", g_chatBuf, 128);
+  if (GlowBtn("Send Chat", {120, 28}))
+    Game::SendChat(g_chatBuf);
+  Toggle("Auto Spam Chat", &g_chatSpam);
+  EndCard();
+
   Card("Kill Players");
   if (!Game::isInGame) {
     ImGui::TextColored({1, 0.3f, 0.3f, 1}, "Not in game");
@@ -216,7 +254,7 @@ static void TabPlayer() {
       if (p.isDead) continue;
       ImGui::PushID(i);
       if (GlowBtn(p.name.c_str(), {140, 24}))
-        Game::KillPlayer(i + 1); // +1 to skip local player (index 0 in AllPlayerControls skipped)
+        Game::KillPlayer(i + 1);
       ImGui::SameLine();
       ImGui::TextColored(p.isImpostor ? ImVec4{1,.2f,.2f,1} : ImVec4{.5f,1,.5f,1}, "%s", p.roleName.c_str());
       ImGui::PopID();
@@ -438,6 +476,18 @@ static void TabTroll() {
   ImGui::SameLine();
   if (GlowBtn("Fix Sabotage", {140, 28}))
     Game::RepairSabotage(doorRoom);
+  if (GlowBtn("Close ALL Doors", {200, 28}))
+    Game::CloseAllDoors();
+  ImGui::SameLine();
+  if (GlowBtn("Fix ALL Sabotage", {200, 28}))
+    Game::FixAllSabotage();
+  EndCard();
+
+  Card("Mass Actions");
+  if (GlowBtn("Teleport ALL to Self", {200, 28}))
+    Game::TeleportAllToSelf();
+  Toggle("Color Cycle (Strobe)", &g_colorCycle);
+  Toggle("Spam Animations", &g_spamAnim);
   EndCard();
 
   Card("Teleport To Player");
@@ -452,6 +502,18 @@ static void TabTroll() {
         Game::TeleportToPlayer(i + 1);
       ImGui::PopID();
     }
+  }
+  EndCard();
+
+  Card("Teleport To Room (Skeld)");
+  const char* skeldRooms[] = {"Cafeteria","Reactor","Navigation","MedBay","Electrical",
+                              "Storage","Weapons","Upper Engine","Lower Engine"};
+  for (int i = 0; i < 9; i++) {
+    ImGui::PushID(300 + i);
+    if (GlowBtn(skeldRooms[i], {140, 24}))
+      Game::TeleportToRoom(i);
+    if ((i % 3) != 2) ImGui::SameLine();
+    ImGui::PopID();
   }
   EndCard();
 

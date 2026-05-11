@@ -15,6 +15,19 @@ typedef void (__cdecl *RpcSendChat_fn)(void*, void*, void*);
 typedef void (__cdecl *RpcPlayAnimation_fn)(void*, uint8_t, void*);
 typedef void (__cdecl *RpcSnapTo_fn)(void*, float, float, void*);
 typedef void (__cdecl *StartGame_fn)(void*, void*);
+typedef void (__cdecl *RpcSetRole_fn)(void*, uint16_t, bool, void*);
+typedef void (__cdecl *CmdCheckMurder_fn)(void*, void*, void*);
+typedef void (__cdecl *CmdReportDeadBody_fn)(void*, void*, void*);
+typedef void (__cdecl *RpcSetVisor_fn)(void*, void*, void*);
+typedef void (__cdecl *RpcSetNamePlate_fn)(void*, void*, void*);
+typedef void (__cdecl *RpcSetLevel_fn)(void*, uint32_t, void*);
+typedef void (__cdecl *RpcShapeshift_fn)(void*, void*, bool, void*);
+typedef void (__cdecl *RpcVanish_fn)(void*, void*);
+typedef void (__cdecl *RpcAppear_fn)(void*, bool, void*);
+typedef void (__cdecl *RpcVent_fn)(void*, int, void*);
+typedef void (__cdecl *RpcCloseDoors_fn)(void*, int, void*);
+typedef void (__cdecl *RpcUpdateSystem_fn)(void*, int, uint8_t, void*);
+typedef void (__cdecl *RpcProtectPlayer_fn)(void*, void*, int, void*);
 
 static void *gameDomain = nullptr;
 static bool threadAttached = false;
@@ -252,6 +265,77 @@ static void UpdateInternal() {
         fn(lp, 2, nullptr);
       }
     }
+
+    // ── New continuous toggle features ──
+    // 1. No Kill Cooldown — constantly reset kill timer to 0
+    if (g_noKillCd)
+      *(float *)((uintptr_t)lp + 0x80) = 0.f; // killTimer = 0
+
+    // 2. Infinite Emergencies — set RemainingEmergencies to 999
+    if (g_infiniteEmergencies)
+      *(int *)((uintptr_t)lp + 0x84) = 999; // RemainingEmergencies
+
+    // 3. Always Moveable — force moveable flag
+    if (g_alwaysMoveable)
+      *(bool *)((uintptr_t)lp + 0x38) = true; // moveable
+
+    // 4. Impostor Vision — force high light mod every frame
+    if (g_impostorVision)
+      SetFullbright(true);
+
+    // 5. Max Report Distance — see/report bodies from anywhere
+    if (g_maxReportDist)
+      *(float *)((uintptr_t)lp + 0x34) = 9999.f; // MaxReportDistance
+
+    // 6. God Mode — prevent death by resetting IsDead
+    if (g_godmode) {
+      void *data = *(void **)((uintptr_t)lp + 0x58);
+      if (IsValid(data))
+        *(bool *)((uintptr_t)data + 0x54) = false; // IsDead = false
+    }
+
+    // 7. Color Cycle — rapidly cycle through all 18 colors
+    if (g_colorCycle) {
+      static float cc = 0;
+      cc += 0.03f;
+      if (cc > 18.f) cc = 0;
+      if (gameAssembly) {
+        auto fn = (RpcSetColor_fn)(gameAssembly + 0x5C9430);
+        fn(lp, (uint8_t)(int)cc, nullptr);
+      }
+    }
+
+    // 8. Spam Animation — rapidly play random animations
+    if (g_spamAnim && gameAssembly) {
+      static float saTimer = 0;
+      saTimer += 0.1f;
+      if (saTimer > 0.2f) {
+        saTimer = 0;
+        auto fn = (RpcPlayAnimation_fn)(gameAssembly + 0x5C8D80);
+        fn(lp, (uint8_t)(rand() % 3), nullptr);
+      }
+    }
+
+    // 9. Auto Tasks — complete tasks every few seconds
+    if (g_autoTasks) {
+      static float atTimer = 0;
+      atTimer += 0.1f;
+      if (atTimer > 3.0f) {
+        atTimer = 0;
+        CompleteAllTasks();
+      }
+    }
+
+    // 10. Force Protect — constantly apply guardian angel shield
+    if (g_forceProtect && gameAssembly) {
+      static float fpTimer = 0;
+      fpTimer += 0.1f;
+      if (fpTimer > 2.0f) {
+        fpTimer = 0;
+        auto fn = (RpcProtectPlayer_fn)(gameAssembly + 0x5C8E70);
+        fn(lp, lp, 0, nullptr); // protect self
+      }
+    }
   }
 
   if (PlayerControl::klass) {
@@ -290,9 +374,16 @@ static void UpdateInternal() {
           if (!IsValid(data))
             continue;
 
+          // 11. Freeze All — set all other players speed to 0
+          if (g_freezeAll && pcObj != lp) {
+            void *phys2 = *(void **)((uintptr_t)pcObj + 0x94);
+            if (IsValid(phys2))
+              *(float *)((uintptr_t)phys2 + 0x34) = 0.f;
+          }
+
           PlayerInfo p;
           p.isDead = *(bool *)((uintptr_t)data + 0x54);
-          uint16_t role = *(uint16_t *)((uintptr_t)data + 0x38); // RoleType (ushort)
+          uint16_t role = *(uint16_t *)((uintptr_t)data + 0x38);
           p.isImpostor = (role == 1 || role == 5 || role == 7 || role == 9);
           p.roleName = GetRoleName(role);
 
@@ -382,9 +473,7 @@ void SetFullbright(bool enabled) {
 }
 
 // Direct RVA function typedefs for IL2CPP compiled methods (x86 cdecl)
-// In IL2CPP x86: retType func(void* __this, params..., void* MethodInfo*)
-typedef void (__cdecl *RpcCompleteTask_fn)(void *__this, uint32_t idx, void *method);
-typedef void (__cdecl *RpcStartMeeting_fn)(void *__this, void *info, void *method);
+
 
 void CompleteAllTasks() {
   Attach();
@@ -681,9 +770,7 @@ static void *GetPlayerByIndex(int idx) {
   return (idx < a->len && IsValid(a->m_Items[idx])) ? a->m_Items[idx] : nullptr;
 }
 
-// RpcSetRole(RoleTypes roleType, bool canOverrideRole) — RVA: 0x5C99C0
-// RoleTypes is uint16_t: 0=Crew, 1=Imp, 2=Sci, 3=Eng, 4=GA, 5=Shape, 8=Noise, 9=Phantom, 10=Tracker
-typedef void (__cdecl *RpcSetRole_fn)(void*, uint16_t, bool, void*);
+// RpcSetRole RVA: 0x5C99C0
 
 void SetRole(int roleType) {
   Attach();
@@ -695,8 +782,7 @@ void SetRole(int roleType) {
   } __except(EXCEPTION_EXECUTE_HANDLER) {}
 }
 
-// CmdCheckMurder(PlayerControl target) — RVA: 0x5C1A50
-typedef void (__cdecl *CmdCheckMurder_fn)(void*, void*, void*);
+// CmdCheckMurder RVA: 0x5C1A50
 
 void KillPlayer(int playerIndex) {
   Attach();
@@ -733,8 +819,7 @@ void KillAllPlayers() {
   } __except(EXCEPTION_EXECUTE_HANDLER) {}
 }
 
-// CmdReportDeadBody(NetworkedPlayerInfo target) — RVA: 0x5C2150
-typedef void (__cdecl *CmdReportDeadBody_fn)(void*, void*, void*);
+// CmdReportDeadBody RVA: 0x5C2150
 
 void ReportBody(int playerIndex) {
   Attach();
@@ -750,8 +835,7 @@ void ReportBody(int playerIndex) {
   } __except(EXCEPTION_EXECUTE_HANDLER) {}
 }
 
-// RpcSetVisor(string visorId) — RVA: 0x5C9D90
-typedef void (__cdecl *RpcSetVisor_fn)(void*, void*, void*);
+// RpcSetVisor RVA: 0x5C9D90
 
 void SetVisor(int visorId) {
   Attach();
@@ -765,8 +849,7 @@ void SetVisor(int visorId) {
   } __except(EXCEPTION_EXECUTE_HANDLER) {}
 }
 
-// RpcSetNamePlate(string namePlateId) — RVA: 0x5C96C0
-typedef void (__cdecl *RpcSetNamePlate_fn)(void*, void*, void*);
+// RpcSetNamePlate RVA: 0x5C96C0
 
 void SetNamePlate(int npId) {
   Attach();
@@ -780,8 +863,7 @@ void SetNamePlate(int npId) {
   } __except(EXCEPTION_EXECUTE_HANDLER) {}
 }
 
-// RpcSetLevel(uint level) — RVA: 0x5C9620
-typedef void (__cdecl *RpcSetLevel_fn)(void*, uint32_t, void*);
+// RpcSetLevel RVA: 0x5C9620
 
 void SetLevel(int level) {
   Attach();
@@ -803,8 +885,7 @@ void RevivePlayer() {
     *(bool *)((uintptr_t)data + 0x54) = false; // IsDead = false
 }
 
-// RpcShapeshift(PlayerControl target, bool shouldAnimate) — RVA: 0x5C9ED0
-typedef void (__cdecl *RpcShapeshift_fn)(void*, void*, bool, void*);
+// RpcShapeshift RVA: 0x5C9ED0
 
 void ShapeshiftTo(int playerIndex) {
   Attach();
@@ -817,8 +898,7 @@ void ShapeshiftTo(int playerIndex) {
   } __except(EXCEPTION_EXECUTE_HANDLER) {}
 }
 
-// RpcVanish() — RVA: 0x5CA3E0 (Phantom ability)
-typedef void (__cdecl *RpcVanish_fn)(void*, void*);
+// RpcVanish RVA: 0x5CA3E0
 
 void Vanish() {
   Attach();
@@ -830,8 +910,7 @@ void Vanish() {
   } __except(EXCEPTION_EXECUTE_HANDLER) {}
 }
 
-// RpcAppear(bool shouldAnimate) — RVA: 0x5C8BA0
-typedef void (__cdecl *RpcAppear_fn)(void*, bool, void*);
+// RpcAppear RVA: 0x5C8BA0
 
 void Appear() {
   Attach();
@@ -843,9 +922,7 @@ void Appear() {
   } __except(EXCEPTION_EXECUTE_HANDLER) {}
 }
 
-// RpcEnterVent(int ventId) — on PlayerPhysics, RVA: 0x5E3250
-// RpcExitVent(int ventId) — on PlayerPhysics, RVA: 0x5E3340
-typedef void (__cdecl *RpcVent_fn)(void*, int, void*);
+// Vent RPCs: Enter 0x5E3250, Exit 0x5E3340
 
 void EnterVent(int ventId) {
   Attach();
@@ -871,8 +948,7 @@ void ExitVent(int ventId) {
   } __except(EXCEPTION_EXECUTE_HANDLER) {}
 }
 
-// RpcCloseDoorsOfType(SystemTypes type) — on ShipStatus, RVA: 0x637E00
-typedef void (__cdecl *RpcCloseDoors_fn)(void*, int, void*);
+// RpcCloseDoorsOfType RVA: 0x637E00
 
 void CloseDoors(int roomType) {
   Attach();
@@ -887,8 +963,7 @@ void CloseDoors(int roomType) {
   } __except(EXCEPTION_EXECUTE_HANDLER) {}
 }
 
-// RpcUpdateSystem(SystemTypes, byte amount) — on ShipStatus, RVA: 0x637EB0
-typedef void (__cdecl *RpcUpdateSystem_fn)(void*, int, uint8_t, void*);
+// RpcUpdateSystem RVA: 0x637EB0
 
 void RepairSabotage(int systemType) {
   Attach();
@@ -915,8 +990,7 @@ void TeleportToPlayer(int playerIndex) {
   TeleportTo(x, y);
 }
 
-// RpcProtectPlayer(PlayerControl target, int colorId) — RVA: 0x5C8E70
-typedef void (__cdecl *RpcProtectPlayer_fn)(void*, void*, int, void*);
+// RpcProtectPlayer RVA: 0x5C8E70
 
 void ProtectPlayer(int playerIndex) {
   Attach();
@@ -927,6 +1001,88 @@ void ProtectPlayer(int playerIndex) {
     auto fn = (RpcProtectPlayer_fn)(gameAssembly + 0x5C8E70);
     fn(lp, target, 0, nullptr);
   } __except(EXCEPTION_EXECUTE_HANDLER) {}
+}
+
+void CloseAllDoors() {
+  // SystemTypes 0-14 covers all rooms on Skeld
+  for (int i = 0; i <= 14; i++)
+    CloseDoors(i);
+}
+
+void FixAllSabotage() {
+  // Fix all system types
+  for (int i = 0; i <= 14; i++)
+    RepairSabotage(i);
+}
+
+void SendChat(const char* msg) {
+  Attach();
+  void *lp = GetLocalPlayer();
+  if (!IsValid(lp) || !gameAssembly || !il2cpp_string_new) return;
+  __try {
+    auto fn = (RpcSendChat_fn)(gameAssembly + 0x5C90C0);
+    fn(lp, il2cpp_string_new(msg), nullptr);
+  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+}
+
+void TeleportAllToSelf() {
+  Attach();
+  void *lp = GetLocalPlayer();
+  if (!IsValid(lp) || !gameAssembly) return;
+  void *myNt = *(void **)((uintptr_t)lp + 0x98);
+  if (!IsValid(myNt)) return;
+  float mx = *(float *)((uintptr_t)myNt + 0x44);
+  float my = *(float *)((uintptr_t)myNt + 0x48);
+
+  if (!PlayerControl::klass) return;
+  void *field = il2cpp_class_get_field_from_name(PlayerControl::klass, "AllPlayerControls");
+  void *list = nullptr;
+  if (field) il2cpp_field_static_get_value(field, &list);
+  if (!IsValid(list)) return;
+  struct L { void *k; void *m; void *items; int size; };
+  struct A { void *k; void *m; void *b; int len; void *m_Items[1]; };
+  L *l = (L *)list;
+  if (!IsValid(l->items)) return;
+  A *a = (A *)l->items;
+  auto fn = (RpcSnapTo_fn)(gameAssembly + 0x535E60);
+  __try {
+    for (int i = 0; i < l->size && i < a->len; i++) {
+      void *p = a->m_Items[i];
+      if (IsValid(p) && p != lp) {
+        void *nt = *(void **)((uintptr_t)p + 0x98);
+        if (IsValid(nt))
+          fn(nt, mx, my, nullptr);
+      }
+    }
+  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+}
+
+void SetDiscussionTime(float time) {
+  if (!GameOptionsManager::klass) return;
+  void *field = il2cpp_class_get_field_from_name(GameOptionsManager::klass, "<Instance>k__BackingField");
+  void *inst = nullptr;
+  if (field) il2cpp_field_static_get_value(field, &inst);
+  if (!IsValid(inst)) return;
+  void *opt = *(void **)((uintptr_t)inst + 0x18);
+  if (IsValid(opt))
+    *(int *)((uintptr_t)opt + 0x2C) = (int)time; // DiscussionTime
+}
+
+void SetVotingTime(float time) {
+  if (!GameOptionsManager::klass) return;
+  void *field = il2cpp_class_get_field_from_name(GameOptionsManager::klass, "<Instance>k__BackingField");
+  void *inst = nullptr;
+  if (field) il2cpp_field_static_get_value(field, &inst);
+  if (!IsValid(inst)) return;
+  void *opt = *(void **)((uintptr_t)inst + 0x18);
+  if (IsValid(opt))
+    *(int *)((uintptr_t)opt + 0x30) = (int)time; // VotingTime
+}
+
+void SetEmergencyCount(int count) {
+  void *lp = GetLocalPlayer();
+  if (IsValid(lp))
+    *(int *)((uintptr_t)lp + 0x84) = count; // RemainingEmergencies
 }
 
 } // namespace Stara::Game

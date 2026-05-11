@@ -110,5 +110,12 @@ namespace Stara::Game {
     void RepairSabotage(int systemType);
     void TeleportToPlayer(int playerIndex);
     void ProtectPlayer(int playerIndex);
+    void CloseAllDoors();
+    void FixAllSabotage();
+    void SendChat(const char* msg);
+    void TeleportAllToSelf();
+    void SetDiscussionTime(float time);
+    void SetVotingTime(float time);
+    void SetEmergencyCount(int count);
 
 } // namespace Stara::Game

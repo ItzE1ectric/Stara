@@ -18,3 +18,11 @@ Game Info Dumps/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Compiled binaries - never push mods
+*.dll
+*.lib
+*.exe
+*.pdb
+*.ilk
+*.exp
