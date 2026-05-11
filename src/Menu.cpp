@@ -23,6 +23,7 @@ bool g_espBox=true, g_espName=true, g_espDist=true, g_espRole=true;
 bool g_espTracer=false, g_espOutline=true, g_espTask=false;
 bool g_rainbow=false, g_spin=false, g_tiny=false, g_giant=false;
 bool g_dance=false, g_particle=false, g_autoPath=false;
+bool g_noclip=false, g_chatSpam=false;
 bool g_devMode=false, g_fpsDisp=true, g_rgbAccent=false;
 float g_accentCol[4] = {0,0.86f,1,1};
 char g_nameBuf[64] = "Stara";
@@ -124,12 +125,15 @@ static void TabDashboard() {
 
 static void TabPlayer() {
     Card("Player Settings");
+    Toggle("NoClip", &g_noclip);
     Slider("Speed##p", &g_speed, 0.5f, 10.f);
     if(ImGui::IsItemDeactivatedAfterEdit()) Game::SetSpeed(g_speed);
-    Slider("Ping Display##p", &g_ping, 0, 999, "%.0f ms");
     ImGui::InputText("Name##p", g_nameBuf, 64);
     if(ImGui::IsItemDeactivatedAfterEdit()) Game::SetName(g_nameBuf);
-    ImGui::ColorEdit4("Color##p", g_playerCol, ImGuiColorEditFlags_NoInputs);
+    EndCard();
+    Card("Lobby Actions");
+    if(GlowBtn("Force Start Game", {180,28})) Game::StartGame();
+    if(GlowBtn("Force End Game", {180,28})) Game::EndGame();
     EndCard();
     Card("Tasks");
     Slider("Task Progress##p", &g_taskProg, 0, 1, "%.0f%%");
