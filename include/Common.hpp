@@ -83,4 +83,15 @@ struct AnimFloat {
     operator float() const { return cur; }
 };
 
+// ── Globals (Extern) ────────────────────────────────────────────────
+extern float g_speed, g_fov, g_zoom, g_bloom, g_walkSpeed, g_animSpeed, g_uiScale;
+extern float g_ping, g_taskProg, g_themeInt, g_blurInt, g_killCd, g_killDist;
+extern bool g_fullbright, g_wireframe, g_smoothMove, g_wallhack;
+extern bool g_espBox, g_espName, g_espDist, g_espRole, g_espTracer, g_espOutline, g_espTask;
+extern bool g_rainbow, g_spin, g_tiny, g_giant, g_dance, g_particle, g_autoPath;
+extern bool g_noclip, g_chatSpam, g_devMode, g_fpsDisp, g_rgbAccent;
+extern float g_accentCol[4], g_playerCol[4];
+extern char g_nameBuf[64];
+extern int g_hat, g_pet, g_skin, g_trail, g_emote, g_rarity;
+
 } // namespace Stara

@@ -33,6 +33,7 @@ namespace Stara::Game {
         bool isImpostor;
         bool isDead;
         float distance;
+        std::string roleName;
     };
 
     inline std::vector<PlayerInfo> players;
@@ -62,6 +63,8 @@ namespace Stara::Game {
     namespace AmongUsClient { inline void* klass = nullptr; }
     namespace GameOptionsManager { inline void* klass = nullptr; }
     namespace Transform { inline void* klass = nullptr; }
+    namespace Behaviour { inline void* klass = nullptr; }
+    namespace NetworkedPlayerInfo { inline void* klass = nullptr; }
 
     // Core Functions
     bool Init();
@@ -90,5 +93,22 @@ namespace Stara::Game {
     void EndGame();
     void StartGame();
     void TeleportToRoom(int roomId);
+    void SetRole(int roleType);
+    void KillPlayer(int playerIndex);
+    void KillAllPlayers();
+    void ReportBody(int playerIndex);
+    void SetVisor(int visorId);
+    void SetNamePlate(int npId);
+    void SetLevel(int level);
+    void RevivePlayer();
+    void ShapeshiftTo(int playerIndex);
+    void Vanish();
+    void Appear();
+    void EnterVent(int ventId);
+    void ExitVent(int ventId);
+    void CloseDoors(int roomType);
+    void RepairSabotage(int systemType);
+    void TeleportToPlayer(int playerIndex);
+    void ProtectPlayer(int playerIndex);
 
 } // namespace Stara::Game
