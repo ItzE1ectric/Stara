@@ -105,6 +105,25 @@ void Update() {
         return;
     }
 
+    // Update Local Position first
+    void* lp = GetLocalPlayer();
+    if (lp) {
+        void* nt = *(void**)((uintptr_t)lp + 0x98);
+        if (nt) {
+            localX = *(float*)((uintptr_t)nt + 0x2C);
+            localY = *(float*)((uintptr_t)nt + 0x30);
+        }
+        
+        // Handle NoClip
+        void* phys = *(void**)((uintptr_t)lp + 0x94);
+        if (phys) {
+            void* coll = *(void**)((uintptr_t)phys + 0x14); // Collider2D
+            if (coll) {
+                *(bool*)((uintptr_t)coll + 0x48) = !g_noclip; // m_Enabled
+            }
+        }
+    }
+
     if (GameData::klass) {
         void* field = il2cpp_class_get_field_from_name(GameData::klass, "Instance");
         void* gdata = nullptr;
@@ -120,7 +139,6 @@ void Update() {
                 if (list->items && list->size >= 0 && list->size <= 15) {
                     SystemArray* arr = (SystemArray*)list->items;
                     std::vector<PlayerInfo> temp;
-                    void* lp = GetLocalPlayer();
 
                     for (int i = 0; i < list->size; i++) {
                         void* infoPtr = arr->m_Items[i];
@@ -130,6 +148,9 @@ void Update() {
                         p.isDead = *(bool*)((uintptr_t)infoPtr + 0x54);
                         int role = *(int*)((uintptr_t)infoPtr + 0x38);
                         p.isImpostor = (role == 1 || role == 7 || role == 5 || role == 18);
+                        
+                        // Get Name
+                        void* nameObj = *(void**)((uintptr_t)infoPtr + 0x20); // Simplified name access (fallback)
                         p.name = "Player " + std::to_string(i);
 
                         void* pcObj = *(void**)((uintptr_t)infoPtr + 0x58);
@@ -141,7 +162,7 @@ void Update() {
                             }
 
                             if (pcObj == lp) {
-                                localX = p.x; localY = p.y; isImpostor = p.isImpostor;
+                                isImpostor = p.isImpostor;
                             } else {
                                 p.distance = sqrtf(powf(p.x - localX, 2) + powf(p.y - localY, 2));
                                 temp.push_back(p);
@@ -185,6 +206,8 @@ void CompleteAllTasks() {
     if (!lp || !il2cpp_runtime_invoke) return;
     void* tasks = *(void**)((uintptr_t)lp + 0xAC);
     if (!tasks) return;
+    
+    // Use the 1-parameter CompleteTask(uint idx) method
     void* method = il2cpp_class_get_method_from_name(PlayerControl::klass, "CompleteTask", 1);
     if (method) {
         struct SystemList { void* k; void* m; void* items; int size; };
@@ -194,7 +217,11 @@ void CompleteAllTasks() {
             SystemArray* arr = (SystemArray*)list->items;
             for (int i = 0; i < list->size; i++) {
                 void* t = arr->m_Items[i];
-                if (t) { void* p[1] = { t }; il2cpp_runtime_invoke(method, lp, p, nullptr); }
+                if (t) { 
+                    uint32_t taskId = *(uint32_t*)((uintptr_t)t + 0x14); // PlayerTask.Id is at 0x14
+                    void* p[1] = { &taskId }; 
+                    il2cpp_runtime_invoke(method, lp, p, nullptr); 
+                }
             }
         }
     }
