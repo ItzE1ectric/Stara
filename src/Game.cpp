@@ -14,6 +14,7 @@ static void* gameDomain = nullptr;
 static bool threadAttached = false;
 
 bool Init() {
+    printf("[*] Stara: Starting Initialization...\n");
     gameAssembly = (uintptr_t)GetModuleHandleA("GameAssembly.dll");
     if (!gameAssembly) return false;
 
@@ -32,12 +33,38 @@ bool Init() {
     il2cpp_runtime_invoke = (il2cpp_runtime_invoke_t)resolve("il2cpp_runtime_invoke");
     il2cpp_thread_attach = (il2cpp_thread_attach_t)resolve("il2cpp_thread_attach");
 
-    if (!il2cpp_domain_get || !il2cpp_class_from_name || !il2cpp_thread_attach) return false;
+    if (!il2cpp_domain_get || !il2cpp_class_from_name || !il2cpp_thread_attach) {
+        printf("[-] Stara: Failed to resolve IL2CPP exports.\n");
+        return false;
+    }
 
     gameDomain = il2cpp_domain_get();
     if (!gameDomain) return false;
 
-    return true;
+    Attach();
+
+    size_t asmCount = 0;
+    void** assemblies = il2cpp_domain_get_assemblies(gameDomain, &asmCount);
+    if (!assemblies) return false;
+
+    for (size_t i = 0; i < asmCount; i++) {
+        void* img = il2cpp_assembly_get_image(assemblies[i]);
+        if (!img) continue;
+
+        if (!PlayerControl::klass) PlayerControl::klass = il2cpp_class_from_name(img, "", "PlayerControl");
+        if (!PlayerPhysics::klass) PlayerPhysics::klass = il2cpp_class_from_name(img, "", "PlayerPhysics");
+        if (!GameData::klass)      GameData::klass      = il2cpp_class_from_name(img, "", "GameData");
+        if (!AmongUsClient::klass) AmongUsClient::klass = il2cpp_class_from_name(img, "", "AmongUsClient");
+        if (!ShipStatus::klass)    ShipStatus::klass    = il2cpp_class_from_name(img, "", "ShipStatus");
+    }
+
+    if (PlayerControl::klass && GameData::klass && AmongUsClient::klass) {
+        printf("[+] Stara: Classes resolved successfully.\n");
+        return true;
+    }
+
+    printf("[-] Stara: Failed to find core game classes.\n");
+    return false;
 }
 
 void Attach() {
@@ -60,14 +87,12 @@ void Update() {
     static float lastUpdateTime = 0;
     float currentTime = (float)ImGui::GetTime();
     
-    // Only update game state every 100ms to prevent lag/crashing the render thread
     if (currentTime - lastUpdateTime < 0.1f) return;
     lastUpdateTime = currentTime;
 
     if (!gameAssembly || !PlayerControl::klass) return;
     Attach();
 
-    // Safe instance check
     if (AmongUsClient::klass) {
         void* field = il2cpp_class_get_field_from_name(AmongUsClient::klass, "Instance");
         void* inst = nullptr;
@@ -92,10 +117,8 @@ void Update() {
                 struct SystemArray { void* k; void* m; void* b; int len; void* m_Items[1]; };
 
                 SystemList* list = (SystemList*)allPlayersList;
-                SystemArray* arr = (SystemArray*)list->items;
-                
-                // Extra sanity check on list size
-                if (arr && list->size >= 0 && list->size <= 15) {
+                if (list->items && list->size >= 0 && list->size <= 15) {
+                    SystemArray* arr = (SystemArray*)list->items;
                     std::vector<PlayerInfo> temp;
                     void* lp = GetLocalPlayer();
 
@@ -133,7 +156,7 @@ void Update() {
 
     if (g_chatSpam) {
         static float lastSpam = 0;
-        if (currentTime - lastSpam > 1.0f) { // 1 second interval is much safer
+        if (currentTime - lastSpam > 1.0f) {
             lastSpam = currentTime;
             SpamChat("Stara Client on TOP");
         }
@@ -251,7 +274,6 @@ void DrawESP(ImDrawList* drawList) {
         float sx = sc.x + (p.x - localX) * 35.f;
         float sy = sc.y - (p.y - localY) * 35.f;
         
-        // Don't render if off screen
         if (sx < 0 || sx > ImGui::GetIO().DisplaySize.x || sy < 0 || sy > ImGui::GetIO().DisplaySize.y) continue;
 
         ImU32 col = p.isImpostor ? IM_COL32(255, 30, 30, 255) : IM_COL32(0, 255, 120, 255);
