@@ -1,4 +1,5 @@
 #include "Game.hpp"
+#include <windows.h>
 
 namespace Stara {
     extern bool g_rainbow;
@@ -12,6 +13,13 @@ namespace Stara::Game {
 
 static void* gameDomain = nullptr;
 static bool threadAttached = false;
+
+// Robust pointer check
+template<typename T>
+static bool IsValid(T* ptr) {
+    if (!ptr || (uintptr_t)ptr < 0x10000 || (uintptr_t)ptr > 0x7FFFFFFF) return false;
+    return true;
+}
 
 void Attach() {
     if (gameDomain && il2cpp_thread_attach && !threadAttached) {
@@ -80,107 +88,107 @@ void* GetLocalPlayer() {
     if (!field) return nullptr;
     void* lp = nullptr;
     il2cpp_field_static_get_value(field, &lp);
-    return lp;
+    return IsValid(lp) ? lp : nullptr;
 }
 
 void Update() {
-    static float lastUpdateTime = 0;
-    float currentTime = (float)ImGui::GetTime();
-    
-    if (currentTime - lastUpdateTime < 0.1f) return;
-    lastUpdateTime = currentTime;
-
-    if (!gameAssembly || !PlayerControl::klass) return;
-    Attach();
-
-    if (AmongUsClient::klass) {
-        void* field = il2cpp_class_get_field_from_name(AmongUsClient::klass, "Instance");
-        void* inst = nullptr;
-        if (field) il2cpp_field_static_get_value(field, &inst);
-        isInGame = (inst != nullptr);
-    }
-
-    if (!isInGame) {
-        players.clear();
-        return;
-    }
-
-    // Update Local Position first
-    void* lp = GetLocalPlayer();
-    if (lp) {
-        void* nt = *(void**)((uintptr_t)lp + 0x98);
-        if (nt) {
-            localX = *(float*)((uintptr_t)nt + 0x2C);
-            localY = *(float*)((uintptr_t)nt + 0x30);
-        }
+    __try {
+        static float lastUpdateTime = 0;
+        float currentTime = (float)ImGui::GetTime();
         
-        // Handle NoClip
-        void* phys = *(void**)((uintptr_t)lp + 0x94);
-        if (phys) {
-            void* coll = *(void**)((uintptr_t)phys + 0x14); // Collider2D
-            if (coll) {
-                *(bool*)((uintptr_t)coll + 0x48) = !g_noclip; // m_Enabled
-            }
+        if (currentTime - lastUpdateTime < 0.1f) return;
+        lastUpdateTime = currentTime;
+
+        if (!gameAssembly || !PlayerControl::klass) return;
+        Attach();
+
+        if (AmongUsClient::klass) {
+            void* field = il2cpp_class_get_field_from_name(AmongUsClient::klass, "Instance");
+            void* inst = nullptr;
+            if (field) il2cpp_field_static_get_value(field, &inst);
+            isInGame = IsValid(inst);
         }
-    }
 
-    if (GameData::klass) {
-        void* field = il2cpp_class_get_field_from_name(GameData::klass, "Instance");
-        void* gdata = nullptr;
-        if (field) il2cpp_field_static_get_value(field, &gdata);
+        if (!isInGame) {
+            players.clear();
+            return;
+        }
 
-        if (gdata) {
-            void* allPlayersList = *(void**)((uintptr_t)gdata + 0x10); 
-            if (allPlayersList) {
-                struct SystemList { void* k; void* m; void* items; int size; };
-                struct SystemArray { void* k; void* m; void* b; int len; void* m_Items[1]; };
-
-                SystemList* list = (SystemList*)allPlayersList;
-                if (list->items && list->size >= 0 && list->size <= 15) {
-                    SystemArray* arr = (SystemArray*)list->items;
-                    std::vector<PlayerInfo> temp;
-
-                    for (int i = 0; i < list->size; i++) {
-                        void* infoPtr = arr->m_Items[i];
-                        if (!infoPtr) continue;
-
-                        PlayerInfo p;
-                        p.isDead = *(bool*)((uintptr_t)infoPtr + 0x54);
-                        int role = *(int*)((uintptr_t)infoPtr + 0x38);
-                        p.isImpostor = (role == 1 || role == 7 || role == 5 || role == 18);
-                        
-                        // Get Name
-                        void* nameObj = *(void**)((uintptr_t)infoPtr + 0x20); // Simplified name access (fallback)
-                        p.name = "Player " + std::to_string(i);
-
-                        void* pcObj = *(void**)((uintptr_t)infoPtr + 0x58);
-                        if (pcObj) {
-                            void* nt = *(void**)((uintptr_t)pcObj + 0x98);
-                            if (nt) {
-                                p.x = *(float*)((uintptr_t)nt + 0x2C);
-                                p.y = *(float*)((uintptr_t)nt + 0x30);
-                            }
-
-                            if (pcObj == lp) {
-                                isImpostor = p.isImpostor;
-                            } else {
-                                p.distance = sqrtf(powf(p.x - localX, 2) + powf(p.y - localY, 2));
-                                temp.push_back(p);
-                            }
-                        }
-                    }
-                    players = temp;
+        void* lp = GetLocalPlayer();
+        if (lp) {
+            void* nt = *(void**)((uintptr_t)lp + 0x98);
+            if (IsValid(nt)) {
+                localX = *(float*)((uintptr_t)nt + 0x2C);
+                localY = *(float*)((uintptr_t)nt + 0x30);
+            }
+            
+            void* phys = *(void**)((uintptr_t)lp + 0x94);
+            if (IsValid(phys)) {
+                void* coll = *(void**)((uintptr_t)phys + 0x14);
+                if (IsValid(coll)) {
+                    *(bool*)((uintptr_t)coll + 0x48) = !g_noclip;
                 }
             }
         }
-    }
 
-    if (g_chatSpam) {
-        static float lastSpam = 0;
-        if (currentTime - lastSpam > 1.0f) {
-            lastSpam = currentTime;
-            SpamChat("Stara Client on TOP");
+        if (GameData::klass) {
+            void* field = il2cpp_class_get_field_from_name(GameData::klass, "Instance");
+            void* gdata = nullptr;
+            if (field) il2cpp_field_static_get_value(field, &gdata);
+
+            if (IsValid(gdata)) {
+                void* allPlayersList = *(void**)((uintptr_t)gdata + 0x10); 
+                if (IsValid(allPlayersList)) {
+                    struct SystemList { void* k; void* m; void* items; int size; };
+                    struct SystemArray { void* k; void* m; void* b; int len; void* m_Items[1]; };
+
+                    SystemList* list = (SystemList*)allPlayersList;
+                    if (IsValid(list->items) && list->size >= 0 && list->size <= 15) {
+                        SystemArray* arr = (SystemArray*)list->items;
+                        std::vector<PlayerInfo> temp;
+
+                        for (int i = 0; i < list->size; i++) {
+                            void* infoPtr = arr->m_Items[i];
+                            if (!IsValid(infoPtr)) continue;
+
+                            PlayerInfo p;
+                            p.isDead = *(bool*)((uintptr_t)infoPtr + 0x54);
+                            int role = *(int*)((uintptr_t)infoPtr + 0x38);
+                            p.isImpostor = (role == 1 || role == 7 || role == 5 || role == 18);
+                            p.name = "Player " + std::to_string(i);
+
+                            void* pcObj = *(void**)((uintptr_t)infoPtr + 0x58);
+                            if (IsValid(pcObj)) {
+                                void* nt = *(void**)((uintptr_t)pcObj + 0x98);
+                                if (IsValid(nt)) {
+                                    p.x = *(float*)((uintptr_t)nt + 0x2C);
+                                    p.y = *(float*)((uintptr_t)nt + 0x30);
+                                }
+
+                                if (pcObj == lp) {
+                                    isImpostor = p.isImpostor;
+                                } else {
+                                    p.distance = sqrtf(powf(p.x - localX, 2) + powf(p.y - localY, 2));
+                                    temp.push_back(p);
+                                }
+                            }
+                        }
+                        players = temp;
+                    }
+                }
+            }
         }
+
+        if (g_chatSpam) {
+            static float lastSpam = 0;
+            if (currentTime - lastSpam > 1.0f) {
+                lastSpam = currentTime;
+                SpamChat("Stara Client on TOP");
+            }
+        }
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        // Silently recover from memory access violations during server join
+        printf("[-] Stara: Recovered from exception in Game::Update.\n");
     }
 }
 
@@ -189,7 +197,7 @@ void SetSpeed(float speed) {
     void* lp = GetLocalPlayer();
     if (!lp) return;
     void* phys = *(void**)((uintptr_t)lp + 0x94);
-    if (phys) { *(float*)((uintptr_t)phys + 0x34) = speed; *(float*)((uintptr_t)phys + 0x38) = speed; }
+    if (IsValid(phys)) { *(float*)((uintptr_t)phys + 0x34) = speed; *(float*)((uintptr_t)phys + 0x38) = speed; }
 }
 
 void SetFullbright(bool enabled) {
@@ -197,40 +205,41 @@ void SetFullbright(bool enabled) {
     void* lp = GetLocalPlayer();
     if (!lp) return;
     void* light = *(void**)((uintptr_t)lp + 0x8C);
-    if (light) *(float*)((uintptr_t)light + 0x10) = enabled ? 100.f : 1.f;
+    if (IsValid(light)) *(float*)((uintptr_t)light + 0x10) = enabled ? 100.f : 1.f;
 }
 
 void CompleteAllTasks() {
-    Attach();
-    void* lp = GetLocalPlayer();
-    if (!lp || !il2cpp_runtime_invoke) return;
-    void* tasks = *(void**)((uintptr_t)lp + 0xAC);
-    if (!tasks) return;
-    
-    // Use the 1-parameter CompleteTask(uint idx) method
-    void* method = il2cpp_class_get_method_from_name(PlayerControl::klass, "CompleteTask", 1);
-    if (method) {
-        struct SystemList { void* k; void* m; void* items; int size; };
-        struct SystemArray { void* k; void* m; void* b; int len; void* m_Items[1]; };
-        SystemList* list = (SystemList*)tasks;
-        if (list->items) {
-            SystemArray* arr = (SystemArray*)list->items;
-            for (int i = 0; i < list->size; i++) {
-                void* t = arr->m_Items[i];
-                if (t) { 
-                    uint32_t taskIdx = *(uint32_t*)((uintptr_t)t + 0x10); // PlayerTask.Index is at 0x10
-                    void* p[1] = { &taskIdx }; 
-                    il2cpp_runtime_invoke(method, lp, p, nullptr); 
+    __try {
+        Attach();
+        void* lp = GetLocalPlayer();
+        if (!lp || !il2cpp_runtime_invoke) return;
+        void* tasks = *(void**)((uintptr_t)lp + 0xAC);
+        if (!IsValid(tasks)) return;
+        
+        void* method = il2cpp_class_get_method_from_name(PlayerControl::klass, "CompleteTask", 1);
+        if (method) {
+            struct SystemList { void* k; void* m; void* items; int size; };
+            struct SystemArray { void* k; void* m; void* b; int len; void* m_Items[1]; };
+            SystemList* list = (SystemList*)tasks;
+            if (IsValid(list->items)) {
+                SystemArray* arr = (SystemArray*)list->items;
+                for (int i = 0; i < list->size; i++) {
+                    void* t = arr->m_Items[i];
+                    if (IsValid(t)) { 
+                        uint32_t taskIdx = *(uint32_t*)((uintptr_t)t + 0x10); 
+                        void* p[1] = { &taskIdx }; 
+                        il2cpp_runtime_invoke(method, lp, p, nullptr); 
+                    }
                 }
             }
         }
-    }
+    } __except(EXCEPTION_EXECUTE_HANDLER) {}
 }
 
 void ForceEmergencyMeeting() {
     Attach();
     void* lp = GetLocalPlayer();
-    if (lp && il2cpp_runtime_invoke) {
+    if (IsValid(lp) && il2cpp_runtime_invoke) {
         void* method = il2cpp_class_get_method_from_name(PlayerControl::klass, "CmdReportDeadBody", 1);
         if (method) { void* p[1] = { nullptr }; il2cpp_runtime_invoke(method, lp, p, nullptr); }
     }
@@ -239,7 +248,7 @@ void ForceEmergencyMeeting() {
 void SetPlayerColor(int colorId) {
     Attach();
     void* lp = GetLocalPlayer();
-    if (lp && il2cpp_runtime_invoke) {
+    if (IsValid(lp) && il2cpp_runtime_invoke) {
         void* method = il2cpp_class_get_method_from_name(PlayerControl::klass, "CmdCheckColor", 1);
         if (method) { uint8_t cid = (uint8_t)colorId; void* p[1] = { &cid }; il2cpp_runtime_invoke(method, lp, p, nullptr); }
     }
@@ -247,16 +256,16 @@ void SetPlayerColor(int colorId) {
 
 void TeleportTo(float x, float y) {
     void* lp = GetLocalPlayer();
-    if (lp) {
+    if (IsValid(lp)) {
         void* nt = *(void**)((uintptr_t)lp + 0x98);
-        if (nt) { *(float*)((uintptr_t)nt + 0x2C) = x; *(float*)((uintptr_t)nt + 0x30) = y; }
+        if (IsValid(nt)) { *(float*)((uintptr_t)nt + 0x2C) = x; *(float*)((uintptr_t)nt + 0x30) = y; }
     }
 }
 
 void SetName(const char* name) {
     Attach();
     void* lp = GetLocalPlayer();
-    if (lp && il2cpp_string_new && il2cpp_runtime_invoke) {
+    if (IsValid(lp) && il2cpp_string_new && il2cpp_runtime_invoke) {
         void* method = il2cpp_class_get_method_from_name(PlayerControl::klass, "CmdCheckName", 1);
         if (method) { void* s = il2cpp_string_new(name); void* p[1] = { s }; il2cpp_runtime_invoke(method, lp, p, nullptr); }
     }
@@ -264,12 +273,12 @@ void SetName(const char* name) {
 
 void SetKillCooldown(float time) {
     void* lp = GetLocalPlayer();
-    if (lp) *(float*)((uintptr_t)lp + 0x80) = time;
+    if (IsValid(lp)) *(float*)((uintptr_t)lp + 0x80) = time;
 }
 
 void SetKillDistance(float dist) {
     void* lp = GetLocalPlayer();
-    if (lp) *(float*)((uintptr_t)lp + 0x34) = dist;
+    if (IsValid(lp)) *(float*)((uintptr_t)lp + 0x34) = dist;
 }
 
 void SetWallhack(bool enabled) { SetFullbright(enabled); }
@@ -277,7 +286,7 @@ void SetWallhack(bool enabled) { SetFullbright(enabled); }
 void SetHat(int hatId) {
     Attach();
     void* lp = GetLocalPlayer();
-    if (lp && il2cpp_runtime_invoke) {
+    if (IsValid(lp) && il2cpp_runtime_invoke) {
         void* method = il2cpp_class_get_method_from_name(PlayerControl::klass, "SetHat", 1);
         if (method) { void* p[1] = { &hatId }; il2cpp_runtime_invoke(method, lp, p, nullptr); }
     }
@@ -286,7 +295,7 @@ void SetHat(int hatId) {
 void SetPet(int petId) {
     Attach();
     void* lp = GetLocalPlayer();
-    if (lp && il2cpp_runtime_invoke) {
+    if (IsValid(lp) && il2cpp_runtime_invoke) {
         void* method = il2cpp_class_get_method_from_name(PlayerControl::klass, "SetPet", 1);
         if (method) { void* p[1] = { &petId }; il2cpp_runtime_invoke(method, lp, p, nullptr); }
     }
@@ -315,7 +324,7 @@ void DrawESP(ImDrawList* drawList) {
 void SpamChat(const char* text) {
     Attach();
     void* lp = GetLocalPlayer();
-    if (lp && il2cpp_string_new && il2cpp_runtime_invoke) {
+    if (IsValid(lp) && il2cpp_string_new && il2cpp_runtime_invoke) {
         void* method = il2cpp_class_get_method_from_name(PlayerControl::klass, "CmdChat", 1);
         if (method) { void* s = il2cpp_string_new(text); void* p[1] = { s }; il2cpp_runtime_invoke(method, lp, p, nullptr); }
     }
@@ -327,7 +336,7 @@ void EndGame() {
     void* field = il2cpp_class_get_field_from_name(AmongUsClient::klass, "Instance");
     void* inst = nullptr;
     if (field) il2cpp_field_static_get_value(field, &inst);
-    if (inst) {
+    if (IsValid(inst)) {
         void* method = il2cpp_class_get_method_from_name(AmongUsClient::klass, "RpcEndGame", 1);
         if (method) { int reason = 0; void* p[1] = { &reason }; il2cpp_runtime_invoke(method, inst, p, nullptr); }
     }
@@ -339,7 +348,7 @@ void StartGame() {
     void* field = il2cpp_class_get_field_from_name(AmongUsClient::klass, "Instance");
     void* inst = nullptr;
     if (field) il2cpp_field_static_get_value(field, &inst);
-    if (inst) {
+    if (IsValid(inst)) {
         void* method = il2cpp_class_get_method_from_name(AmongUsClient::klass, "CmdStartGame", 0);
         if (method) il2cpp_runtime_invoke(method, inst, nullptr, nullptr);
     }
