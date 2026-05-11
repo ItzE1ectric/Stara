@@ -207,10 +207,12 @@ static void TabESP() {
     }
     EndCard();
     
+    Card("Visuals");
     Toggle("Tracer Lines", &g_espTracer);
     Toggle("Outline", &g_espOutline);
     Toggle("Task Markers", &g_espTask);
     EndCard();
+    
     // ESP preview panel
     Card("##espPreview");
     ImDrawList* dl = ImGui::GetWindowDrawList();
