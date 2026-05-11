@@ -34,7 +34,7 @@
 namespace Stara {
 
 constexpr const char* APP_NAME    = "Among Stara Client";
-constexpr const char* APP_VERSION = "v1.0.0";
+constexpr const char* APP_VERSION = "v1.1.0";
 
 namespace Colors {
     constexpr ImU32 Cyan           = IM_COL32(0, 220, 255, 255);

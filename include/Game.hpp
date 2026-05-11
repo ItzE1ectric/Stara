@@ -60,6 +60,8 @@ namespace Stara::Game {
     namespace GameData      { inline void* klass = nullptr; }
     namespace ShipStatus    { inline void* klass = nullptr; }
     namespace AmongUsClient { inline void* klass = nullptr; }
+    namespace GameOptionsManager { inline void* klass = nullptr; }
+    namespace Transform { inline void* klass = nullptr; }
 
     // Core Functions
     bool Init();
@@ -79,7 +81,9 @@ namespace Stara::Game {
     void SetWallhack(bool enabled);
     void SetHat(int hatId);
     void SetPet(int petId);
+    void SetSkin(int skinId);
     void SetCharacterScale(float scale);
+    void PlayAnimation(uint8_t animId);
     
     // New Cheats
     void SpamChat(const char* text);
