@@ -4,6 +4,10 @@
 namespace Stara {
     extern bool g_rainbow;
     extern bool g_spin;
+    extern bool g_espBox;
+    extern bool g_espName;
+    extern bool g_espDist;
+    extern bool g_espRole;
 }
 
 namespace Stara::Game {
@@ -85,9 +89,7 @@ void* GetLocalPlayer() {
     if (!PlayerControl::klass || !il2cpp_class_get_field_from_name || !il2cpp_field_static_get_value) return nullptr;
     
     void* field = il2cpp_class_get_field_from_name(PlayerControl::klass, "LocalPlayer");
-    if (!field) {
-        return nullptr;
-    }
+    if (!field) return nullptr;
     
     void* localPlayer = nullptr;
     il2cpp_field_static_get_value(field, &localPlayer);
@@ -102,7 +104,12 @@ void Update() {
         void* field = il2cpp_class_get_field_from_name(AmongUsClient::klass, "Instance");
         void* instance = nullptr;
         if (field) il2cpp_field_static_get_value(field, &instance);
-        isInGame = (instance != nullptr);
+        
+        bool currentInGame = (instance != nullptr);
+        if (isInGame != currentInGame) {
+            isInGame = currentInGame;
+            printf("[*] Game State: %s\n", isInGame ? "IN_GAME" : "MENU");
+        }
     }
 
     if (!isInGame) {
@@ -110,7 +117,7 @@ void Update() {
         return;
     }
 
-    // Refresh player list for ESP
+    // Refresh player list
     void* allPlayersField = il2cpp_class_get_field_from_name(PlayerControl::klass, "AllPlayerControls");
     void* playerList = nullptr;
     if (allPlayersField) il2cpp_field_static_get_value(allPlayersField, &playerList);
@@ -119,7 +126,7 @@ void Update() {
         struct SystemList {
             void* klass;
             void* monitor;
-            void* items; // Il2CppArray
+            void* items; 
             int size;
         };
         struct SystemArray {
@@ -131,6 +138,7 @@ void Update() {
         };
 
         SystemList* list = (SystemList*)playerList;
+        if (!list->items) return;
         SystemArray* arr = (SystemArray*)list->items;
         
         std::vector<PlayerInfo> tempPlayers;
@@ -147,10 +155,8 @@ void Update() {
             if (data) {
                 info.isDead = *(bool*)((uintptr_t)data + 0x54);
                 int role = *(int*)((uintptr_t)data + 0x38);
-                info.isImpostor = (role == 1); // RoleTypes.Impostor
+                info.isImpostor = (role == 1);
                 info.name = "Player"; 
-                int colorId = 0; // Default
-                info.color = GetAmongUsColor(colorId);
             }
 
             // Get Position
@@ -182,31 +188,27 @@ void Update() {
 }
 
 void SetSpeed(float speed) {
-    if (!gameAssembly || !PlayerPhysics::klass || !PlayerControl::klass) return;
-    
     void* localPlayer = GetLocalPlayer();
     if (!localPlayer) return;
     
-    void* myPhysics = *(void**)((uintptr_t)localPlayer + PlayerControl::offset_MyPhysics);
-    if (!myPhysics) return;
-    
-    *(float*)((uintptr_t)myPhysics + PlayerPhysics::offset_Speed) = speed;
-    *(float*)((uintptr_t)myPhysics + PlayerPhysics::offset_GhostSpeed) = speed;
+    void* myPhysics = *(void**)((uintptr_t)localPlayer + 0x94);
+    if (myPhysics) {
+        *(float*)((uintptr_t)myPhysics + 0x34) = speed;
+        *(float*)((uintptr_t)myPhysics + 0x38) = speed;
+    }
 }
 
 void SetFullbright(bool enabled) {
-    if (!gameAssembly || !PlayerControl::klass) return;
     void* localPlayer = GetLocalPlayer();
     if (!localPlayer) return;
 
-    void* lightSource = *(void**)((uintptr_t)localPlayer + 0x8C); // lightSource
+    void* lightSource = *(void**)((uintptr_t)localPlayer + 0x8C);
     if (lightSource) {
-        *(float*)((uintptr_t)lightSource + 0x10) = enabled ? 100.0f : 1.0f; // viewDistance
+        *(float*)((uintptr_t)lightSource + 0x10) = enabled ? 100.0f : 1.0f;
     }
 }
 
 void CompleteAllTasks() {
-    if (!gameAssembly || !PlayerControl::klass || !il2cpp_class_get_method_from_name || !il2cpp_runtime_invoke) return;
     void* localPlayer = GetLocalPlayer();
     if (!localPlayer) return;
 
@@ -216,19 +218,8 @@ void CompleteAllTasks() {
     void* method = il2cpp_class_get_method_from_name(PlayerControl::klass, "CompleteTask", 1);
     if (!method) return;
 
-    struct SystemList {
-        void* klass;
-        void* monitor;
-        void* items; 
-        int size;
-    };
-    struct SystemArray {
-        void* klass;
-        void* monitor;
-        void* bounds;
-        int max_length;
-        void* m_Items[1];
-    };
+    struct SystemList { void* k; void* m; void* items; int size; };
+    struct SystemArray { void* k; void* m; void* b; int len; void* m_Items[1]; };
 
     SystemList* list = (SystemList*)myTasks;
     if (list->items) {
@@ -244,7 +235,6 @@ void CompleteAllTasks() {
 }
 
 void ForceEmergencyMeeting() {
-    if (!gameAssembly || !PlayerControl::klass || !il2cpp_class_get_method_from_name || !il2cpp_runtime_invoke) return;
     void* localPlayer = GetLocalPlayer();
     if (!localPlayer) return;
 
@@ -256,7 +246,6 @@ void ForceEmergencyMeeting() {
 }
 
 void SetPlayerColor(int colorId) {
-    if (!gameAssembly || !PlayerControl::klass || !il2cpp_class_get_method_from_name || !il2cpp_runtime_invoke) return;
     void* localPlayer = GetLocalPlayer();
     if (!localPlayer) return;
 
@@ -269,11 +258,10 @@ void SetPlayerColor(int colorId) {
 }
 
 void TeleportTo(float x, float y) {
-    if (!gameAssembly || !PlayerControl::klass) return;
     void* localPlayer = GetLocalPlayer();
     if (!localPlayer) return;
 
-    void* netTransform = *(void**)((uintptr_t)localPlayer + PlayerControl::offset_NetTransform);
+    void* netTransform = *(void**)((uintptr_t)localPlayer + 0x98);
     if (netTransform) {
         *(float*)((uintptr_t)netTransform + 0x2C) = x;
         *(float*)((uintptr_t)netTransform + 0x30) = y;
@@ -281,7 +269,6 @@ void TeleportTo(float x, float y) {
 }
 
 void SetName(const char* name) {
-    if (!gameAssembly || !PlayerControl::klass || !il2cpp_string_new || !il2cpp_class_get_method_from_name || !il2cpp_runtime_invoke) return;
     void* localPlayer = GetLocalPlayer();
     if (!localPlayer) return;
 
@@ -296,55 +283,69 @@ void SetName(const char* name) {
 void SetKillCooldown(float time) {
     void* localPlayer = GetLocalPlayer();
     if (localPlayer) {
-        *(float*)((uintptr_t)localPlayer + 0x80) = time; // killTimer
+        *(float*)((uintptr_t)localPlayer + 0x80) = time;
     }
 }
 
 void SetKillDistance(float dist) {
     void* localPlayer = GetLocalPlayer();
     if (localPlayer) {
-        *(float*)((uintptr_t)localPlayer + 0x34) = dist; // MaxReportDistance
+        *(float*)((uintptr_t)localPlayer + 0x34) = dist;
     }
 }
 
-void SetWallhack(bool enabled) {
-    SetFullbright(enabled);
-}
+void SetWallhack(bool enabled) { SetFullbright(enabled); }
 
 void SetHat(int hatId) {
-    if (!gameAssembly || !PlayerControl::klass || !il2cpp_class_get_method_from_name || !il2cpp_runtime_invoke) return;
     void* localPlayer = GetLocalPlayer();
-    if (!localPlayer) return;
-
-    void* method = il2cpp_class_get_method_from_name(PlayerControl::klass, "SetHat", 1);
-    if (method) {
-        void* params[1] = { &hatId };
-        il2cpp_runtime_invoke(method, localPlayer, params, nullptr);
+    if (localPlayer) {
+        void* method = il2cpp_class_get_method_from_name(PlayerControl::klass, "SetHat", 1);
+        if (method) { void* params[1] = { &hatId }; il2cpp_runtime_invoke(method, localPlayer, params, nullptr); }
     }
 }
 
 void SetPet(int petId) {
-    if (!gameAssembly || !PlayerControl::klass || !il2cpp_class_get_method_from_name || !il2cpp_runtime_invoke) return;
     void* localPlayer = GetLocalPlayer();
-    if (!localPlayer) return;
-
-    void* method = il2cpp_class_get_method_from_name(PlayerControl::klass, "SetPet", 1);
-    if (method) {
-        void* params[1] = { &petId };
-        il2cpp_runtime_invoke(method, localPlayer, params, nullptr);
+    if (localPlayer) {
+        void* method = il2cpp_class_get_method_from_name(PlayerControl::klass, "SetPet", 1);
+        if (method) { void* params[1] = { &petId }; il2cpp_runtime_invoke(method, localPlayer, params, nullptr); }
     }
 }
 
-void SetCharacterScale(float scale) {
-    void* localPlayer = GetLocalPlayer();
-    if (localPlayer) {
-        void* transform = *(void**)((uintptr_t)localPlayer + 0x18); // GameObject -> Transform
-        if (transform) {
-            // Setting scale (Vector3 at 0x18 or similar)
-            // For now, let's just use the direct offset if known. 
-            // Most Unity versions use 0x18 for localScale in Transform.
+void SetCharacterScale(float scale) { }
+
+void DrawESP(ImDrawList* drawList) {
+    if (!isInGame || players.empty()) return;
+
+    for (const auto& player : players) {
+        ImVec2 screenCenter = { ImGui::GetIO().DisplaySize.x / 2, ImGui::GetIO().DisplaySize.y / 2 };
+        float zoom = 35.0f; 
+        float screenX = screenCenter.x + (player.x - localX) * zoom;
+        float screenY = screenCenter.y - (player.y - localY) * zoom;
+
+        if (g_espBox) {
+            drawList->AddRect({screenX - 20, screenY - 40}, {screenX + 20, screenY + 10}, 
+                player.isImpostor ? IM_COL32(255, 0, 0, 255) : IM_COL32(0, 255, 0, 255), 0, 0, 2.0f);
+        }
+
+        if (g_espName) {
+            char buf[128];
+            sprintf(buf, "%s %s", player.name.c_str(), player.isImpostor ? "[IMP]" : "");
+            drawList->AddText({screenX - 20, screenY - 55}, IM_COL32(255, 255, 255, 255), buf);
         }
     }
+}
+
+void SpamChat(const char* text) {
+    // Implementation for real chat spam
+}
+
+void EndGame() {
+    // End game logic
+}
+
+void TeleportToRoom(int roomId) {
+    // Teleport logic
 }
 
 } // namespace Stara::Game

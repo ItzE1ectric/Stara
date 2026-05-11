@@ -112,6 +112,9 @@ HRESULT __stdcall Hooks::hkPresent(IDXGISwapChain* sc, UINT sync, UINT flags) {
     ImGui_ImplWin32_NewFrame();
     ImGui::NewFrame();
 
+    // Render ESP
+    Game::DrawESP(ImGui::GetForegroundDrawList());
+
     // Render our menu
     RenderMenu();
 

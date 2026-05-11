@@ -106,6 +106,10 @@ void SetWallhack(bool enabled);
 void SetHat(int hatId);
 void SetPet(int petId);
 void SetCharacterScale(float scale);
+void DrawESP(ImDrawList* drawList);
+void SpamChat(const char* text);
+void EndGame();
+void TeleportToRoom(int roomId);
 
 // Among Us player color palette
 inline ImVec4 GetAmongUsColor(int id) {

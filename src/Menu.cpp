@@ -166,13 +166,43 @@ static void TabVisuals() {
 }
 
 static void TabESP() {
-    Card("ESP Preview");
-    ImGui::TextColored(Accent(), "All ESP renders in preview panels only");
-    ImGui::Spacing();
+    Card("ESP Configuration");
     Toggle("Player Box", &g_espBox);
-    Toggle("Nametag", &g_espName);
-    Toggle("Distance", &g_espDist);
-    Toggle("Role Color", &g_espRole);
+    Toggle("Player Name", &g_espName);
+    Toggle("Show Distance", &g_espDist);
+    Toggle("Show Roles", &g_espRole);
+    EndCard();
+
+    Card("Session Player List (Impostor Detector)");
+    if (!Game::isInGame) {
+        ImGui::TextColored({1,0.3f,0.3f,1}, "Not in a session.");
+    } else {
+        if (ImGui::BeginTable("PlayerListTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+            ImGui::TableSetupColumn("Name");
+            ImGui::TableSetupColumn("Role");
+            ImGui::TableSetupColumn("Dist");
+            ImGui::TableHeadersRow();
+
+            for (const auto& p : Game::players) {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("%s", p.name.c_str());
+                
+                ImGui::TableNextColumn();
+                if (p.isImpostor) {
+                    ImGui::TextColored({1, 0.2f, 0.2f, 1}, "IMPOSTOR");
+                } else {
+                    ImGui::TextColored({0.2f, 1, 0.2f, 1}, "Crewmate");
+                }
+
+                ImGui::TableNextColumn();
+                ImGui::Text("%.1fm", p.distance);
+            }
+            ImGui::EndTable();
+        }
+    }
+    EndCard();
+    
     Toggle("Tracer Lines", &g_espTracer);
     Toggle("Outline", &g_espOutline);
     Toggle("Task Markers", &g_espTask);
