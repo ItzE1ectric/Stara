@@ -1,0 +1,20 @@
+# Build directories
+build/
+build32/
+out/
+bin/
+obj/
+
+# Visual Studio files
+.vs/
+*.sln
+*.vcxproj
+*.filters
+*.user
+
+# Dumps (too large for GitHub)
+Game Info Dumps/
+
+# OS files
+.DS_Store
+Thumbs.db
