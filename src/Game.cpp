@@ -1,13 +1,9 @@
 #include "Game.hpp"
 
-// External state from Menu.cpp (Stara namespace)
 namespace Stara {
     extern bool g_rainbow;
-    extern bool g_spin;
     extern bool g_espBox;
     extern bool g_espName;
-    extern bool g_espDist;
-    extern bool g_espRole;
     extern bool g_noclip;
     extern bool g_chatSpam;
 }
@@ -15,6 +11,7 @@ namespace Stara {
 namespace Stara::Game {
 
 static void* gameDomain = nullptr;
+static bool threadAttached = false;
 
 bool Init() {
     gameAssembly = (uintptr_t)GetModuleHandleA("GameAssembly.dll");
@@ -40,36 +37,14 @@ bool Init() {
     gameDomain = il2cpp_domain_get();
     if (!gameDomain) return false;
 
-    il2cpp_thread_attach(gameDomain);
-
-    size_t asmCount = 0;
-    void** assemblies = il2cpp_domain_get_assemblies(gameDomain, &asmCount);
-    if (!assemblies) return false;
-
-    void* csharpImage = nullptr;
-    for (size_t i = 0; i < asmCount; i++) {
-        void* img = il2cpp_assembly_get_image(assemblies[i]);
-        if (img) {
-            void* pc = il2cpp_class_from_name(img, "", "PlayerControl");
-            if (pc) {
-                PlayerControl::klass = pc;
-                csharpImage = img;
-                break;
-            }
-        }
-    }
-
-    if (!csharpImage) return false;
-
-    PlayerPhysics::klass = il2cpp_class_from_name(csharpImage, "", "PlayerPhysics");
-    GameData::klass      = il2cpp_class_from_name(csharpImage, "", "GameData");
-    AmongUsClient::klass = il2cpp_class_from_name(csharpImage, "", "AmongUsClient");
-
     return true;
 }
 
 void Attach() {
-    if (gameDomain && il2cpp_thread_attach) il2cpp_thread_attach(gameDomain);
+    if (gameDomain && il2cpp_thread_attach && !threadAttached) {
+        il2cpp_thread_attach(gameDomain);
+        threadAttached = true;
+    }
 }
 
 void* GetLocalPlayer() {
@@ -82,9 +57,17 @@ void* GetLocalPlayer() {
 }
 
 void Update() {
+    static float lastUpdateTime = 0;
+    float currentTime = (float)ImGui::GetTime();
+    
+    // Only update game state every 100ms to prevent lag/crashing the render thread
+    if (currentTime - lastUpdateTime < 0.1f) return;
+    lastUpdateTime = currentTime;
+
     if (!gameAssembly || !PlayerControl::klass) return;
     Attach();
 
+    // Safe instance check
     if (AmongUsClient::klass) {
         void* field = il2cpp_class_get_field_from_name(AmongUsClient::klass, "Instance");
         void* inst = nullptr;
@@ -110,6 +93,8 @@ void Update() {
 
                 SystemList* list = (SystemList*)allPlayersList;
                 SystemArray* arr = (SystemArray*)list->items;
+                
+                // Extra sanity check on list size
                 if (arr && list->size >= 0 && list->size <= 15) {
                     std::vector<PlayerInfo> temp;
                     void* lp = GetLocalPlayer();
@@ -134,10 +119,6 @@ void Update() {
 
                             if (pcObj == lp) {
                                 localX = p.x; localY = p.y; isImpostor = p.isImpostor;
-                                if (g_noclip) {
-                                    void* rb = *(void**)((uintptr_t)pcObj + 0x94); // MyPhysics/Rigidbody
-                                    // Set speed only, noclip requires more complex patching
-                                }
                             } else {
                                 p.distance = sqrtf(powf(p.x - localX, 2) + powf(p.y - localY, 2));
                                 temp.push_back(p);
@@ -151,9 +132,9 @@ void Update() {
     }
 
     if (g_chatSpam) {
-        static float last = 0;
-        if (ImGui::GetTime() - last > 0.5f) { // Slower spam to prevent kick
-            last = (float)ImGui::GetTime();
+        static float lastSpam = 0;
+        if (currentTime - lastSpam > 1.0f) { // 1 second interval is much safer
+            lastSpam = currentTime;
             SpamChat("Stara Client on TOP");
         }
     }
@@ -269,10 +250,14 @@ void DrawESP(ImDrawList* drawList) {
         ImVec2 sc = { ImGui::GetIO().DisplaySize.x / 2, ImGui::GetIO().DisplaySize.y / 2 };
         float sx = sc.x + (p.x - localX) * 35.f;
         float sy = sc.y - (p.y - localY) * 35.f;
+        
+        // Don't render if off screen
+        if (sx < 0 || sx > ImGui::GetIO().DisplaySize.x || sy < 0 || sy > ImGui::GetIO().DisplaySize.y) continue;
+
         ImU32 col = p.isImpostor ? IM_COL32(255, 30, 30, 255) : IM_COL32(0, 255, 120, 255);
         if (g_espBox) drawList->AddRect({sx - 15, sy - 30}, {sx + 15, sy + 5}, col, 0, 0, 1.5f);
         if (g_espName) {
-            char b[64]; sprintf(b, "%s %s", p.name.c_str(), p.isImpostor ? "[IMPOSTOR]" : "");
+            char b[64]; sprintf(b, "P%s", p.isImpostor ? " [IMP]" : "");
             drawList->AddText({sx - 15, sy - 45}, col, b);
         }
     }
