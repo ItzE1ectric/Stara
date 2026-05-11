@@ -18,16 +18,16 @@ static float g_speed = 1.f, g_fov = 90.f, g_zoom = 1.f, g_bloom = 0.5f;
 static float g_walkSpeed = 1.f, g_animSpeed = 1.f, g_uiScale = 1.f;
 static float g_ping = 50.f, g_taskProg = 0.f, g_themeInt = 1.f, g_blurInt = 0.8f;
 static float g_killCd = 0.f, g_killDist = 1.0f;
-static bool g_fullbright=false, g_wireframe=false, g_smoothMove=true, g_wallhack=false;
-static bool g_espBox=true, g_espName=true, g_espDist=true, g_espRole=true;
-static bool g_espTracer=false, g_espOutline=true, g_espTask=false;
+bool g_fullbright=false, g_wireframe=false, g_smoothMove=true, g_wallhack=false;
+bool g_espBox=true, g_espName=true, g_espDist=true, g_espRole=true;
+bool g_espTracer=false, g_espOutline=true, g_espTask=false;
 bool g_rainbow=false, g_spin=false, g_tiny=false, g_giant=false;
 bool g_dance=false, g_particle=false, g_autoPath=false;
-static bool g_devMode=false, g_fpsDisp=true, g_rgbAccent=false;
-static float g_accentCol[4] = {0,0.86f,1,1};
-static char g_nameBuf[64] = "Stara";
-static float g_playerCol[4] = {0,0.86f,1,1};
-static int g_hat=0, g_pet=0, g_skin=0, g_trail=0, g_emote=0, g_rarity=0;
+bool g_devMode=false, g_fpsDisp=true, g_rgbAccent=false;
+float g_accentCol[4] = {0,0.86f,1,1};
+char g_nameBuf[64] = "Stara";
+float g_playerCol[4] = {0,0.86f,1,1};
+int g_hat=0, g_pet=0, g_skin=0, g_trail=0, g_emote=0, g_rarity=0;
 static float g_hue = 0.f;
 
 static ImVec4 Accent() {
