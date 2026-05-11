@@ -222,6 +222,34 @@ void SetName(const char* name) {
     if (method) { void* s = il2cpp_string_new(name); void* p[1] = { s }; il2cpp_runtime_invoke(method, lp, p, nullptr); }
 }
 
+void SetWallhack(bool enabled) { SetFullbright(enabled); }
+
+void SetHat(int hatId) {
+    void* lp = GetLocalPlayer();
+    if (lp && il2cpp_runtime_invoke) {
+        void* method = il2cpp_class_get_method_from_name(PlayerControl::klass, "SetHat", 1);
+        if (method) { void* p[1] = { &hatId }; il2cpp_runtime_invoke(method, lp, p, nullptr); }
+    }
+}
+
+void SetPet(int petId) {
+    void* lp = GetLocalPlayer();
+    if (lp && il2cpp_runtime_invoke) {
+        void* method = il2cpp_class_get_method_from_name(PlayerControl::klass, "SetPet", 1);
+        if (method) { void* p[1] = { &petId }; il2cpp_runtime_invoke(method, lp, p, nullptr); }
+    }
+}
+
+void SetCharacterScale(float scale) {
+    void* lp = GetLocalPlayer();
+    if (lp) {
+        void* transform = *(void**)((uintptr_t)lp + 0x8); // Component.transform
+        if (transform) {
+            // Simplified scale setting (would need Vector3)
+        }
+    }
+}
+
 void DrawESP(ImDrawList* drawList) {
     if (!isInGame || players.empty()) return;
     for (const auto& p : players) {
