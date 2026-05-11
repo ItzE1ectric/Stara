@@ -31,11 +31,62 @@ typedef void (__cdecl *RpcProtectPlayer_fn)(void*, void*, int, void*);
 
 static void *gameDomain = nullptr;
 static bool threadAttached = false;
+static bool antiCheatPatched = false;
+
+// Anti-cheat: rate limiter for RPCs to avoid server-side detection
+static float lastRpcTime = 0;
+static const float RPC_MIN_INTERVAL = 0.05f; // 50ms between RPCs
+
+static bool CanSendRpc() {
+  float now = (float)GetTickCount64() / 1000.f;
+  if (now - lastRpcTime < RPC_MIN_INTERVAL) return false;
+  lastRpcTime = now;
+  return true;
+}
 
 template <typename T> static bool IsValid(T *ptr) {
   if (!ptr || (uintptr_t)ptr < 0x10000 || (uintptr_t)ptr > 0x7FFFFFFF)
     return false;
   return true;
+}
+
+// Anti-kick: patch KickPlayer to NOP (ret immediately)
+static void PatchAntiKick() {
+  if (antiCheatPatched || !gameAssembly) return;
+  
+  // KickPlayer on AmongUsClient — RVA: 0x6FB460
+  // KickPlayer on InnerNetServer — RVA: 0x7011A0
+  uintptr_t kickAddrs[] = { gameAssembly + 0x6FB460, gameAssembly + 0x7011A0 };
+  
+  for (auto addr : kickAddrs) {
+    DWORD oldProt;
+    if (VirtualProtect((void*)addr, 8, PAGE_EXECUTE_READWRITE, &oldProt)) {
+      // x86 ret = 0xC3, pad with NOPs
+      *(uint8_t*)(addr) = 0xC3;     // ret
+      *(uint8_t*)(addr + 1) = 0x90; // nop
+      *(uint8_t*)(addr + 2) = 0x90; // nop
+      VirtualProtect((void*)addr, 8, oldProt, &oldProt);
+    }
+  }
+  
+  // Also patch CanKick() to always return false — RVA: 0x6F7230
+  uintptr_t canKickAddr = gameAssembly + 0x6F7230;
+  DWORD oldProt;
+  if (VirtualProtect((void*)canKickAddr, 8, PAGE_EXECUTE_READWRITE, &oldProt)) {
+    *(uint8_t*)(canKickAddr) = 0x31;      // xor eax, eax
+    *(uint8_t*)(canKickAddr + 1) = 0xC0;
+    *(uint8_t*)(canKickAddr + 2) = 0xC3;  // ret
+    VirtualProtect((void*)canKickAddr, 8, oldProt, &oldProt);
+  }
+  
+  antiCheatPatched = true;
+  printf("[+] Anti-kick patches applied\n");
+}
+
+// Speed clamp: prevent server-side speed detection
+static float ClampSpeed(float speed) {
+  // Server allows up to ~3x normal speed before flagging
+  return (speed > 3.0f) ? 3.0f : speed;
 }
 
 void Attach() {
@@ -117,6 +168,9 @@ bool Init() {
       NetworkedPlayerInfo::klass =
           il2cpp_class_from_name(img, "", "NetworkedPlayerInfo");
   }
+
+  // Apply anti-cheat patches
+  PatchAntiKick();
 
   return (PlayerControl::klass && GameData::klass && AmongUsClient::klass &&
           GameOptionsManager::klass && Transform::klass && Behaviour::klass);
