@@ -34,13 +34,22 @@ static bool threadAttached = false;
 static bool antiCheatPatched = false;
 
 // Anti-cheat: rate limiter for RPCs to avoid server-side detection
-static float lastRpcTime = 0;
-static const float RPC_MIN_INTERVAL = 0.05f; // 50ms between RPCs
+static DWORD lastRpcTick = 0;
+static const DWORD RPC_MIN_INTERVAL_MS = 100; // 100ms min between RPCs
 
 static bool CanSendRpc() {
-  float now = (float)GetTickCount64() / 1000.f;
-  if (now - lastRpcTime < RPC_MIN_INTERVAL) return false;
-  lastRpcTime = now;
+  DWORD now = GetTickCount();
+  if (now - lastRpcTick < RPC_MIN_INTERVAL_MS) return false;
+  lastRpcTick = now;
+  return true;
+}
+
+// Separate rate limiter for cosmetic RPCs (less strict)
+static DWORD lastCosmeticTick = 0;
+static bool CanSendCosmeticRpc() {
+  DWORD now = GetTickCount();
+  if (now - lastCosmeticTick < 500) return false; // 500ms for cosmetics
+  lastCosmeticTick = now;
   return true;
 }
 
@@ -202,17 +211,34 @@ void *GetLocalPlayer() {
 
 static void *get_playerName_method = nullptr;
 
+// SEH helper: validate and read Il2CppString length safely
+static bool SafeReadStringData(void *str, int32_t *outLen, wchar_t **outChars) {
+  __try {
+    struct Il2CppString {
+      void *klass;
+      void *monitor;
+      int32_t length;
+      wchar_t chars[1];
+    };
+    Il2CppString *is = (Il2CppString *)str;
+    if (is->length <= 0 || is->length > 256)
+      return false;
+    *outLen = is->length;
+    *outChars = is->chars;
+    return true;
+  } __except(EXCEPTION_EXECUTE_HANDLER) {
+    return false;
+  }
+}
+
 static std::string ReadIl2CppString(void *str) {
   if (!str)
     return "Unknown";
-  struct Il2CppString {
-    void *klass;
-    void *monitor;
-    int32_t length;
-    wchar_t chars[1];
-  };
-  Il2CppString *is = (Il2CppString *)str;
-  std::wstring ws(is->chars, is->length);
+  int32_t len = 0;
+  wchar_t *chars = nullptr;
+  if (!SafeReadStringData(str, &len, &chars))
+    return "Unknown";
+  std::wstring ws(chars, len);
   return std::string(ws.begin(), ws.end());
 }
 
@@ -314,22 +340,18 @@ static void UpdateInternal() {
       SetFullbright(true);
     }
 
-    if (g_rainbow) {
-      static float h = 0;
-      h += 0.05f;
-      if (h > 1.0f)
-        h = 0;
-      SetPlayerColor((int)(h * 10));
+    if (g_rainbow && CanSendCosmeticRpc()) {
+      static int h = 0;
+      h = (h + 1) % 18;
+      if (gameAssembly) {
+        auto fn = (RpcSetColor_fn)(gameAssembly + 0x5C9430);
+        fn(lp, (uint8_t)h, nullptr);
+      }
     }
 
-    if (g_spin && gameAssembly) {
-      static float spinTimer = 0;
-      spinTimer += 0.1f;
-      if (spinTimer > 0.3f) {
-        spinTimer = 0;
-        auto fn = (RpcPlayAnimation_fn)(gameAssembly + 0x5C8D80);
-        fn(lp, 2, nullptr);
-      }
+    if (g_spin && gameAssembly && CanSendRpc()) {
+      auto fn = (RpcPlayAnimation_fn)(gameAssembly + 0x5C8D80);
+      fn(lp, 2, nullptr);
     }
 
     // ── New continuous toggle features ──
@@ -360,46 +382,38 @@ static void UpdateInternal() {
         *(bool *)((uintptr_t)data + 0x54) = false; // IsDead = false
     }
 
-    // 7. Color Cycle — rapidly cycle through all 18 colors
-    if (g_colorCycle) {
-      static float cc = 0;
-      cc += 0.03f;
-      if (cc > 18.f) cc = 0;
-      if (gameAssembly) {
-        auto fn = (RpcSetColor_fn)(gameAssembly + 0x5C9430);
-        fn(lp, (uint8_t)(int)cc, nullptr);
-      }
+    // 7. Color Cycle — rate-limited to avoid spam
+    if (g_colorCycle && CanSendCosmeticRpc() && gameAssembly) {
+      static int cc = 0;
+      cc = (cc + 1) % 18;
+      auto fn = (RpcSetColor_fn)(gameAssembly + 0x5C9430);
+      fn(lp, (uint8_t)cc, nullptr);
     }
 
-    // 8. Spam Animation — rapidly play random animations
-    if (g_spamAnim && gameAssembly) {
-      static float saTimer = 0;
-      saTimer += 0.1f;
-      if (saTimer > 0.2f) {
-        saTimer = 0;
-        auto fn = (RpcPlayAnimation_fn)(gameAssembly + 0x5C8D80);
-        fn(lp, (uint8_t)(rand() % 3), nullptr);
-      }
+    // 8. Spam Animation — rate-limited
+    if (g_spamAnim && gameAssembly && CanSendRpc()) {
+      auto fn = (RpcPlayAnimation_fn)(gameAssembly + 0x5C8D80);
+      fn(lp, (uint8_t)(rand() % 3), nullptr);
     }
 
-    // 9. Auto Tasks — complete tasks every few seconds
+    // 9. Auto Tasks — complete tasks every 5 seconds
     if (g_autoTasks) {
       static float atTimer = 0;
       atTimer += 0.1f;
-      if (atTimer > 3.0f) {
+      if (atTimer > 5.0f) {
         atTimer = 0;
         CompleteAllTasks();
       }
     }
 
-    // 10. Force Protect — constantly apply guardian angel shield
+    // 10. Force Protect — rate-limited to every 5s
     if (g_forceProtect && gameAssembly) {
       static float fpTimer = 0;
       fpTimer += 0.1f;
-      if (fpTimer > 2.0f) {
+      if (fpTimer > 5.0f) {
         fpTimer = 0;
         auto fn = (RpcProtectPlayer_fn)(gameAssembly + 0x5C8E70);
-        fn(lp, lp, 0, nullptr); // protect self
+        fn(lp, lp, 0, nullptr);
       }
     }
   }
@@ -440,7 +454,7 @@ static void UpdateInternal() {
           if (!IsValid(data))
             continue;
 
-          // 11. Freeze All — set all other players speed to 0
+          // 11. Freeze All — local visual only (sets speed locally)
           if (g_freezeAll && pcObj != lp) {
             void *phys2 = *(void **)((uintptr_t)pcObj + 0x94);
             if (IsValid(phys2))
@@ -482,9 +496,9 @@ static void UpdateInternal() {
 
   if (g_chatSpam) {
     static float lastSpam = 0;
-    if (currentTime - lastSpam > 1.0f) {
+    if (currentTime - lastSpam > 2.0f) { // 2s interval to avoid spam detection
       lastSpam = currentTime;
-      SpamChat("Stara Client on TOP");
+      SpamChat(g_chatBuf[0] ? g_chatBuf : "Stara Client");
     }
   }
 }
@@ -866,7 +880,6 @@ void KillAllPlayers() {
   void *lp = GetLocalPlayer();
   if (!IsValid(lp) || !gameAssembly) return;
   auto fn = (CmdCheckMurder_fn)(gameAssembly + 0x5C1A50);
-  // Iterate all players
   void *field = il2cpp_class_get_field_from_name(PlayerControl::klass, "AllPlayerControls");
   void *list = nullptr;
   if (field) il2cpp_field_static_get_value(field, &list);
@@ -879,8 +892,10 @@ void KillAllPlayers() {
   __try {
     for (int i = 0; i < l->size && i < a->len; i++) {
       void *p = a->m_Items[i];
-      if (IsValid(p) && p != lp)
+      if (IsValid(p) && p != lp) {
         fn(lp, p, nullptr);
+        Sleep(150); // 150ms delay between kills to avoid flood detection
+      }
     }
   } __except(EXCEPTION_EXECUTE_HANDLER) {}
 }
