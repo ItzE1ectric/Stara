@@ -11,7 +11,7 @@ typedef void (__cdecl *RpcSetName_fn)(void*, void*, void*);
 typedef void (__cdecl *RpcSetHat_fn)(void*, void*, void*);
 typedef void (__cdecl *RpcSetPet_fn)(void*, void*, void*);
 typedef void (__cdecl *RpcSetSkin_fn)(void*, void*, void*);
-typedef void (__cdecl *RpcSendChat_fn)(void*, void*, void*);
+typedef bool (__cdecl *RpcSendChat_fn)(void*, void*, void*); // returns bool
 typedef void (__cdecl *RpcPlayAnimation_fn)(void*, uint8_t, void*);
 typedef void (__cdecl *RpcSnapTo_fn)(void*, float, float, void*);
 typedef void (__cdecl *StartGame_fn)(void*, void*);
@@ -321,22 +321,20 @@ static void UpdateInternal() {
       localY = *(float *)((uintptr_t)nt + 0x48); // lastPosition.y
     }
 
-    void *coll = *(void **)((uintptr_t)lp + 0x90); // Collider
-    if (IsValid(coll)) {
+    // NoClip: properly disable collision without freezing player
+    {
       static void *set_enabled_method = nullptr;
-      if (!set_enabled_method && Behaviour::klass) {
-        set_enabled_method =
-            il2cpp_class_get_method_from_name(Behaviour::klass, "set_enabled", 1);
-      }
-      if (set_enabled_method) {
-        bool enabled = !g_noclip;
-        void *p[1] = {&enabled};
+      if (!set_enabled_method && Behaviour::klass)
+        set_enabled_method = il2cpp_class_get_method_from_name(Behaviour::klass, "set_enabled", 1);
+      void *coll = *(void **)((uintptr_t)lp + 0x90); // Collider2D
+      if (IsValid(coll) && set_enabled_method) {
+        bool val = !g_noclip; // true = collider on, false = collider off
+        void *p[1] = {&val};
         il2cpp_runtime_invoke(set_enabled_method, coll, p, nullptr);
       }
+      if (g_noclip)
+        *(bool *)((uintptr_t)lp + 0x38) = true; // keep moveable=true
     }
-
-    // Set inVent as backup for NoClip
-    *(bool *)((uintptr_t)lp + 0x48) = g_noclip;
 
     void *phys = *(void **)((uintptr_t)lp + 0x94); // MyPhysics
     if (IsValid(phys)) {
@@ -568,18 +566,20 @@ void CompleteAllTasks() {
   if (!lp || !gameAssembly)
     return;
 
-  // Direct RVA call — RpcCompleteTask RVA: 0x5C8C20
-  auto RpcCompleteTask =
-      (RpcCompleteTask_fn)(gameAssembly + 0x5C8C20);
+  auto RpcCompleteTask = (RpcCompleteTask_fn)(gameAssembly + 0x5C8C20);
 
-  void *tasks = *(void **)((uintptr_t)lp + 0xAC); // myTasks (List<PlayerTask>)
-  if (!IsValid(tasks))
-    return;
+  // Try two known offsets for myTasks pointer
+  void *tasks = nullptr;
+  for (uintptr_t off : {0xACu, 0xA8u, 0xB0u}) {
+    void *t = *(void **)((uintptr_t)lp + off);
+    if (IsValid(t)) { tasks = t; break; }
+  }
+  if (!IsValid(tasks)) return;
 
   struct Il2CppList {
     void *klass;
     void *monitor;
-    void *items; // Il2CppArray*
+    void *items;
     int size;
   };
   struct Il2CppArray {
@@ -592,20 +592,19 @@ void CompleteAllTasks() {
 
   __try {
     Il2CppList *list = (Il2CppList *)tasks;
-    if (!IsValid(list->items) || list->size <= 0)
+    if (!IsValid(list->items) || list->size <= 0 || list->size > 20)
       return;
     Il2CppArray *arr = (Il2CppArray *)list->items;
     for (int i = 0; i < list->size && i < arr->max_length; i++) {
       void *task = arr->m_Items[i];
-      if (!IsValid(task))
-        continue;
-      // PlayerTask.Index at 0x10, PlayerTask.Id at 0x14
-      uint32_t idx = *(uint32_t *)((uintptr_t)task + 0x10); // Index
+      if (!IsValid(task)) continue;
+      // Mark task complete locally first (IsComplete flag at 0x28)
+      *(bool *)((uintptr_t)task + 0x28) = true;
+      // Send RPC to sync
+      uint32_t idx = *(uint32_t *)((uintptr_t)task + 0x10);
       RpcCompleteTask(lp, idx, nullptr);
     }
-  } __except (EXCEPTION_EXECUTE_HANDLER) {
-    printf("[!] Stara: CompleteAllTasks caught exception\n");
-  }
+  } __except (EXCEPTION_EXECUTE_HANDLER) {}
 }
 
 void ForceEmergencyMeeting() {
@@ -656,9 +655,15 @@ void SetName(const char *name) {
   void *lp = GetLocalPlayer();
   if (!IsValid(lp) || !gameAssembly || !il2cpp_string_new) return;
   __try {
+    // Write name directly to CachedPlayerData.PlayerName (string at offset 0x10)
+    void *data = *(void **)((uintptr_t)lp + 0x58);
+    if (IsValid(data)) {
+      void *nameStr = il2cpp_string_new(name);
+      *(void **)((uintptr_t)data + 0x10) = nameStr;
+    }
+    // Also RPC broadcast (RpcSetName RVA: 0x5C9790)
     auto fn = (RpcSetName_fn)(gameAssembly + 0x5C9790);
-    void *s = il2cpp_string_new(name);
-    fn(lp, s, nullptr);
+    fn(lp, il2cpp_string_new(name), nullptr);
   } __except(EXCEPTION_EXECUTE_HANDLER) {}
 }
 
@@ -859,9 +864,9 @@ void SpamChat(const char *text) {
   void *lp = GetLocalPlayer();
   if (!IsValid(lp) || !gameAssembly || !il2cpp_string_new) return;
   __try {
-    // RpcSendChat RVA: 0x5C90C0
     auto fn = (RpcSendChat_fn)(gameAssembly + 0x5C90C0);
-    fn(lp, il2cpp_string_new(text), nullptr);
+    void *str = il2cpp_string_new(text);
+    fn(lp, str, nullptr); // returns bool but we ignore it
   } __except(EXCEPTION_EXECUTE_HANDLER) {}
 }
 
@@ -988,7 +993,10 @@ void SetPlayerRole(int playerIndex, int roleType) {
   ApplyRoleToPlayer(target, roleType);
 }
 
-// CmdCheckMurder RVA: 0x5C1A50
+// MurderPlayer RVA: 0x5C5D70  (direct kill, no role check)
+// RpcMurderPlayer RVA: 0x5C8CC0 (network sync)
+typedef void (__cdecl *MurderPlayer_fn)(void*, void*, uint32_t, void*);
+typedef void (__cdecl *RpcMurderPlayer_fn)(void*, void*, bool, void*);
 
 void KillPlayer(int playerIndex) {
   Attach();
@@ -996,8 +1004,12 @@ void KillPlayer(int playerIndex) {
   void *target = GetPlayerByIndex(playerIndex);
   if (!IsValid(lp) || !IsValid(target) || !gameAssembly) return;
   __try {
-    auto fn = (CmdCheckMurder_fn)(gameAssembly + 0x5C1A50);
-    fn(lp, target, nullptr);
+    // MurderPlayer directly — bypasses impostor role check
+    auto fn = (MurderPlayer_fn)(gameAssembly + 0x5C5D70);
+    fn(lp, target, 0, nullptr); // MurderResultFlags=0 (no flag)
+    // Also RPC to sync death to other clients
+    auto rpc = (RpcMurderPlayer_fn)(gameAssembly + 0x5C8CC0);
+    rpc(lp, target, true, nullptr);
   } __except(EXCEPTION_EXECUTE_HANDLER) {}
 }
 
@@ -1005,7 +1017,8 @@ void KillAllPlayers() {
   Attach();
   void *lp = GetLocalPlayer();
   if (!IsValid(lp) || !gameAssembly) return;
-  auto fn = (CmdCheckMurder_fn)(gameAssembly + 0x5C1A50);
+  auto murder = (MurderPlayer_fn)(gameAssembly + 0x5C5D70);
+  auto rpcMurder = (RpcMurderPlayer_fn)(gameAssembly + 0x5C8CC0);
   void *field = il2cpp_class_get_field_from_name(PlayerControl::klass, "AllPlayerControls");
   void *list = nullptr;
   if (field) il2cpp_field_static_get_value(field, &list);
@@ -1019,8 +1032,9 @@ void KillAllPlayers() {
     for (int i = 0; i < l->size && i < a->len; i++) {
       void *p = a->m_Items[i];
       if (IsValid(p) && p != lp) {
-        fn(lp, p, nullptr);
-        Sleep(150); // 150ms delay between kills to avoid flood detection
+        murder(lp, p, 0, nullptr);
+        rpcMurder(lp, p, true, nullptr);
+        Sleep(100);
       }
     }
   } __except(EXCEPTION_EXECUTE_HANDLER) {}
@@ -1077,6 +1091,11 @@ void SetLevel(int level) {
   void *lp = GetLocalPlayer();
   if (!IsValid(lp) || !gameAssembly) return;
   __try {
+    // Write level directly to PlayerData.Level field (offset 0x40)
+    void *data = *(void **)((uintptr_t)lp + 0x58);
+    if (IsValid(data))
+      *(uint32_t *)((uintptr_t)data + 0x40) = (uint32_t)level;
+    // Also broadcast via RPC
     auto fn = (RpcSetLevel_fn)(gameAssembly + 0x5C9620);
     fn(lp, (uint32_t)level, nullptr);
   } __except(EXCEPTION_EXECUTE_HANDLER) {}
