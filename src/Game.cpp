@@ -937,6 +937,16 @@ void SetRole(int roleType) {
   } __except(EXCEPTION_EXECUTE_HANDLER) {}
 }
 
+void SetPlayerRole(int playerIndex, int roleType) {
+  Attach();
+  void *target = GetPlayerByIndex(playerIndex);
+  if (!IsValid(target) || !gameAssembly) return;
+  __try {
+    auto fn = (RpcSetRole_fn)(gameAssembly + 0x5C99C0);
+    fn(target, (uint16_t)roleType, true, nullptr);
+  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+}
+
 // CmdCheckMurder RVA: 0x5C1A50
 
 void KillPlayer(int playerIndex) {

@@ -117,5 +117,6 @@ namespace Stara::Game {
     void SetDiscussionTime(float time);
     void SetVotingTime(float time);
     void SetEmergencyCount(int count);
+    void SetPlayerRole(int playerIndex, int roleType);
 
 } // namespace Stara::Game

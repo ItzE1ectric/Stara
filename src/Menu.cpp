@@ -452,6 +452,55 @@ static void TabTroll() {
   }
   EndCard();
 
+  Card("Set Player Roles");
+  if (!Game::isInGame) {
+    ImGui::TextColored({1,0.3f,0.3f,1}, "Not in game");
+  } else {
+    const char* roleNames[] = {"Crewmate","Impostor","Scientist","Engineer",
+                               "Guardian Angel","Shapeshifter","Crew Ghost","Imp Ghost",
+                               "Noisemaker","Phantom","Tracker"};
+    static int selectedRoles[15] = {0};
+    
+    // Set ALL players to a role at once
+    static int massRole = 1;
+    ImGui::Combo("Mass Role##mr", &massRole, roleNames, 11);
+    if (GlowBtn("Set ALL to Role", {180, 28})) {
+      for (int i = 0; i < (int)Game::players.size(); i++)
+        Game::SetPlayerRole(i + 1, massRole);
+      // Also set self
+      Game::SetRole(massRole);
+    }
+    ImGui::Separator();
+    
+    // Self role
+    ImGui::TextColored({0,0.86f,1,1}, "You:");
+    ImGui::SameLine();
+    static int selfRole = 0;
+    ImGui::SetNextItemWidth(140);
+    ImGui::Combo("##selfRole", &selfRole, roleNames, 11);
+    ImGui::SameLine();
+    if (GlowBtn("Set##self", {50, 22}))
+      Game::SetRole(selfRole);
+    
+    ImGui::Separator();
+    ImGui::TextColored({0.6f,0.6f,0.75f,1}, "Other Players:");
+    
+    for (int i = 0; i < (int)Game::players.size() && i < 15; i++) {
+      const auto &p = Game::players[i];
+      ImGui::PushID(400 + i);
+      ImGui::TextColored(p.isImpostor ? ImVec4{1,.2f,.2f,1} : ImVec4{.5f,1,.5f,1}, 
+                          "%s", p.name.c_str());
+      ImGui::SameLine();
+      ImGui::SetNextItemWidth(130);
+      ImGui::Combo("##role", &selectedRoles[i], roleNames, 11);
+      ImGui::SameLine();
+      if (GlowBtn("Set", {45, 22}))
+        Game::SetPlayerRole(i + 1, selectedRoles[i]);
+      ImGui::PopID();
+    }
+  }
+  EndCard();
+
   Card("Vents");
   static int ventId = 0;
   ImGui::InputInt("Vent ID##v", &ventId);
