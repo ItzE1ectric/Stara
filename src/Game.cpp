@@ -275,6 +275,8 @@ static std::string GetRoleName(uint16_t roleType) {
   }
 }
 
+static void UpdateCameraState(); // forward decl
+
 static void UpdateInternal() {
   static float lastUpdateTime = 0;
   float currentTime = (float)ImGui::GetTime();
@@ -300,6 +302,9 @@ static void UpdateInternal() {
     players.clear();
     return;
   }
+
+  // Update camera for ESP
+  UpdateCameraState();
 
   if (!get_playerName_method && GameData::klass) {
     get_playerName_method =
@@ -738,41 +743,111 @@ void PlayAnimation(uint8_t animId) {
   } __except(EXCEPTION_EXECUTE_HANDLER) {}
 }
 
+// Camera state for ESP (updated in UpdateInternal)
+static float camX = 0, camY = 0, orthoSize = 3.0f;
+
+static void UpdateCameraState() {
+  if (!gameAssembly) return;
+  // Camera.get_main() — RVA: 0x1F18980 (static, no __this)
+  typedef void* (__cdecl *GetMainCamera_fn)(void*);
+  auto getMain = (GetMainCamera_fn)(gameAssembly + 0x1F18980);
+  void *cam = getMain(nullptr);
+  if (!IsValid(cam)) return;
+  
+  // Camera.get_orthographicSize() — RVA: 0x1F18A70
+  typedef float (__cdecl *GetOrthoSize_fn)(void*, void*);
+  auto getOrtho = (GetOrthoSize_fn)(gameAssembly + 0x1F18A70);
+  float os = getOrtho(cam, nullptr);
+  if (os > 0.1f && os < 100.f) orthoSize = os;
+  
+  // Get camera transform via il2cpp_runtime_invoke
+  if (Transform::klass) {
+    static void *get_transform_method = nullptr;
+    if (!get_transform_method) {
+      // Component.get_transform is inherited — resolve from Camera's klass
+      void *camKlass = *(void**)cam; // first field is klass pointer
+      if (IsValid(camKlass))
+        get_transform_method = il2cpp_class_get_method_from_name(camKlass, "get_transform", 0);
+    }
+    if (get_transform_method) {
+      void *camTransform = il2cpp_runtime_invoke(get_transform_method, cam, nullptr, nullptr);
+      if (IsValid(camTransform)) {
+        static void *get_position_method = nullptr;
+        if (!get_position_method)
+          get_position_method = il2cpp_class_get_method_from_name(Transform::klass, "get_position", 0);
+        if (get_position_method) {
+          // get_position returns a boxed Vector3 — we need the unboxed values
+          void *posBox = il2cpp_runtime_invoke(get_position_method, camTransform, nullptr, nullptr);
+          if (IsValid(posBox)) {
+            // Boxed value type: klass, monitor, then the value data (3 floats for Vector3)
+            float *xyz = (float*)((uintptr_t)posBox + 0x08); // skip klass+monitor (2 pointers = 8 bytes on x86)
+            camX = xyz[0];
+            camY = xyz[1];
+          }
+        }
+      }
+    }
+  }
+}
+
+// World-to-screen for orthographic 2D camera
+static ImVec2 WorldToScreen(float wx, float wy) {
+  float screenW = ImGui::GetIO().DisplaySize.x;
+  float screenH = ImGui::GetIO().DisplaySize.y;
+  float ppu = screenH / (2.f * orthoSize); // pixels per world unit
+  float sx = (wx - camX) * ppu + screenW / 2.f;
+  float sy = screenH / 2.f - (wy - camY) * ppu; // Y is flipped (screen Y goes down)
+  return {sx, sy};
+}
+
 void DrawESP(ImDrawList *drawList) {
   if (!isInGame || players.empty()) return;
+  
+  float screenW = ImGui::GetIO().DisplaySize.x;
+  float screenH = ImGui::GetIO().DisplaySize.y;
+  float ppu = screenH / (2.f * orthoSize);
+  // Box size scaled to camera zoom
+  float boxW = 0.5f * ppu;  // ~0.5 world units wide
+  float boxH = 0.8f * ppu;  // ~0.8 world units tall
+  
   for (const auto &p : players) {
-    ImVec2 sc = {ImGui::GetIO().DisplaySize.x/2, ImGui::GetIO().DisplaySize.y/2};
-    float sx = sc.x + (p.x - localX) * 35.f;
-    float sy = sc.y - (p.y - localY) * 35.f;
-    if (sx < -100 || sx > ImGui::GetIO().DisplaySize.x+100 ||
-        sy < -100 || sy > ImGui::GetIO().DisplaySize.y+100) continue;
+    ImVec2 sp = WorldToScreen(p.x, p.y);
+    // Cull offscreen
+    if (sp.x < -200 || sp.x > screenW+200 ||
+        sp.y < -200 || sp.y > screenH+200) continue;
+        
     ImU32 col = p.isImpostor ? IM_COL32(255,30,30,255) : IM_COL32(0,220,255,255);
     if (p.isDead) col = IM_COL32(150,150,150,200);
+    
     if (g_espBox) {
-      drawList->AddRect({sx-19,sy-29},{sx+19,sy+3}, IM_COL32(0,0,0,150), 4.f, 0, 1.f);
-      drawList->AddRect({sx-18,sy-28},{sx+18,sy+2}, col, 4.f, 0, 1.8f);
+      // Shadow
+      drawList->AddRect({sp.x-boxW-1, sp.y-boxH-1}, {sp.x+boxW+1, sp.y+boxH*0.1f+1}, IM_COL32(0,0,0,150), 3.f, 0, 1.5f);
+      // Main box
+      drawList->AddRect({sp.x-boxW, sp.y-boxH}, {sp.x+boxW, sp.y+boxH*0.1f}, col, 3.f, 0, 2.0f);
     }
-    float textY = sy - 44;
+    
+    float textY = sp.y - boxH - 16;
     if (g_espName) {
-      std::string dn = p.name; if (p.isDead) dn += " [DEAD]";
+      std::string dn = p.name;
+      if (p.isDead) dn += " [DEAD]";
       ImVec2 sz = ImGui::CalcTextSize(dn.c_str());
-      drawList->AddText({sx-sz.x/2+1,textY+1}, IM_COL32(0,0,0,180), dn.c_str());
-      drawList->AddText({sx-sz.x/2,textY}, col, dn.c_str());
+      drawList->AddText({sp.x-sz.x/2+1, textY+1}, IM_COL32(0,0,0,180), dn.c_str());
+      drawList->AddText({sp.x-sz.x/2, textY}, col, dn.c_str());
       textY -= 14;
     }
     if (g_espDist) {
       char dbuf[16]; snprintf(dbuf, sizeof(dbuf), "%.1fm", p.distance);
       ImVec2 sz = ImGui::CalcTextSize(dbuf);
-      drawList->AddText({sx-sz.x/2, sy+8}, IM_COL32(200,200,200,200), dbuf);
+      drawList->AddText({sp.x-sz.x/2, sp.y+boxH*0.1f+4}, IM_COL32(200,200,200,200), dbuf);
     }
     if (g_espRole) {
       ImVec2 sz = ImGui::CalcTextSize(p.roleName.c_str());
       ImU32 rc = p.isImpostor ? IM_COL32(255,80,80,255) : IM_COL32(100,255,100,255);
-      drawList->AddText({sx-sz.x/2, sy+20}, rc, p.roleName.c_str());
+      drawList->AddText({sp.x-sz.x/2, sp.y+boxH*0.1f+18}, rc, p.roleName.c_str());
     }
     if (g_espTracer) {
-      ImVec2 bot = {ImGui::GetIO().DisplaySize.x/2.f, ImGui::GetIO().DisplaySize.y};
-      drawList->AddLine(bot, {sx, sy+2}, (col & 0x00FFFFFF)|0x80000000, 1.2f);
+      ImVec2 bot = {screenW/2.f, screenH};
+      drawList->AddLine(bot, {sp.x, sp.y}, (col & 0x00FFFFFF)|0x80000000, 1.2f);
     }
   }
 }
