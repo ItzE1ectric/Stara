@@ -65,6 +65,7 @@ namespace Stara::Game {
     namespace Transform { inline void* klass = nullptr; }
     namespace Behaviour { inline void* klass = nullptr; }
     namespace NetworkedPlayerInfo { inline void* klass = nullptr; }
+    namespace RoleManager { inline void* klass = nullptr; }
 
     // Core Functions
     bool Init();

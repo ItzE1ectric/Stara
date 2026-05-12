@@ -188,6 +188,8 @@ bool Init() {
     if (!NetworkedPlayerInfo::klass)
       NetworkedPlayerInfo::klass =
           il2cpp_class_from_name(img, "", "NetworkedPlayerInfo");
+    if (!RoleManager::klass)
+      RoleManager::klass = il2cpp_class_from_name(img, "", "RoleManager");
   }
 
   // Apply anti-cheat patches
@@ -925,26 +927,65 @@ static void *GetPlayerByIndex(int idx) {
   return (idx < a->len && IsValid(a->m_Items[idx])) ? a->m_Items[idx] : nullptr;
 }
 
-// RpcSetRole RVA: 0x5C99C0
+// RoleManager.SetRole(PlayerControl, RoleTypes) — RVA: 0x60FA50
+// Direct call: works regardless of host status, bypasses server authority.
+typedef void (__cdecl *RoleManager_SetRole_fn)(void*, void*, uint16_t, void*);
+
+// Get RoleManager.Instance via static field _instance (offset 0x0 in static table)
+static void *GetRoleManager() {
+  if (!RoleManager::klass) return nullptr;
+  void *field = il2cpp_class_get_field_from_name(RoleManager::klass, "_instance");
+  if (!field) return nullptr;
+  void *inst = nullptr;
+  il2cpp_field_static_get_value(field, &inst);
+  return IsValid(inst) ? inst : nullptr;
+}
+
+// Apply role both client-side (memory) and server-side (RoleManager + Rpc)
+static void ApplyRoleToPlayer(void *targetPc, int roleType) {
+  if (!IsValid(targetPc) || !gameAssembly) return;
+
+  // 1. Client-side: write roleType directly into CachedPlayerData.Role (offset 0x38)
+  void *data = *(void **)((uintptr_t)targetPc + 0x58); // CachedPlayerData
+  if (IsValid(data))
+    *(uint16_t *)((uintptr_t)data + 0x38) = (uint16_t)roleType;
+
+  // 2. Server-side: RoleManager.SetRole(playerControl, roleType)
+  //    This is the INTERNAL game method — no host check, applies the actual
+  //    RoleBehaviour component and syncs state locally.
+  void *rm = GetRoleManager();
+  if (IsValid(rm)) {
+    __try {
+      auto fn = (RoleManager_SetRole_fn)(gameAssembly + 0x60FA50);
+      fn(rm, targetPc, (uint16_t)roleType, nullptr);
+    } __except(EXCEPTION_EXECUTE_HANDLER) {}
+  }
+
+  // 3. Network: RpcSetRole broadcasts to all clients
+  //    RVA: 0x5C99C0  signature: void(PlayerControl*, RoleTypes, bool, MethodInfo*)
+  __try {
+    auto fn = (RpcSetRole_fn)(gameAssembly + 0x5C99C0);
+    fn(targetPc, (uint16_t)roleType, true, nullptr);
+  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+}
 
 void SetRole(int roleType) {
   Attach();
   void *lp = GetLocalPlayer();
-  if (!IsValid(lp) || !gameAssembly) return;
-  __try {
-    auto fn = (RpcSetRole_fn)(gameAssembly + 0x5C99C0);
-    fn(lp, (uint16_t)roleType, true, nullptr);
-  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+  if (!IsValid(lp)) return;
+  ApplyRoleToPlayer(lp, roleType);
 }
 
 void SetPlayerRole(int playerIndex, int roleType) {
   Attach();
+  // playerIndex from UI is 1-based offset into AllPlayerControls,
+  // but we stored other players starting at index 0 in Game::players.
+  // GetPlayerByIndex(0) = first in AllPlayerControls list.
+  // Try 0-based first, fallback to (playerIndex-1).
   void *target = GetPlayerByIndex(playerIndex);
-  if (!IsValid(target) || !gameAssembly) return;
-  __try {
-    auto fn = (RpcSetRole_fn)(gameAssembly + 0x5C99C0);
-    fn(target, (uint16_t)roleType, true, nullptr);
-  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+  if (!IsValid(target)) target = GetPlayerByIndex(playerIndex - 1);
+  if (!IsValid(target)) return;
+  ApplyRoleToPlayer(target, roleType);
 }
 
 // CmdCheckMurder RVA: 0x5C1A50
