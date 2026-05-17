@@ -32,7 +32,6 @@ typedef void(__cdecl *RpcUpdateSystem_fn)(void *, int, uint8_t, void *);
 typedef void(__cdecl *RpcProtectPlayer_fn)(void *, void *, int, void *);
 
 static void *gameDomain = nullptr;
-static bool threadAttached = false;
 static bool antiCheatPatched = false;
 static bool antiCheatPatchStateCaptured = false;
 static uint8_t g_origKickPlayerClient[8] = {};
@@ -283,9 +282,14 @@ static float ClampSpeed(float speed) {
 }
 
 void Attach() {
-  if (gameDomain && il2cpp_thread_attach && !threadAttached) {
+  // Each thread that calls IL2CPP must be registered with the GC.
+  // Using thread_local ensures the render thread (DX11 Present hook) and
+  // the init thread (DllMain) each get attached independently.
+  // Without this: "Fatal error in GC: Collecting from unknown thread"
+  static thread_local bool thisThreadAttached = false;
+  if (gameDomain && il2cpp_thread_attach && !thisThreadAttached) {
     il2cpp_thread_attach(gameDomain);
-    threadAttached = true;
+    thisThreadAttached = true;
   }
 }
 
