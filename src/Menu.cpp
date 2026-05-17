@@ -1408,8 +1408,6 @@ static void TabPlayer() {
   ImGui::TextColored({.8f, .85f, 1, 1}, "(Current: %d)", Game::localLevel);
   if (ImGui::IsItemDeactivatedAfterEdit())
     Game::SetLevel(g_level);
-  if (!Game::IsHost())
-    ImGui::TextColored({1, .85f, .3f, 1}, "Level: local only (others see original).");
   EndCard();
 
   Card("Role");
@@ -1444,20 +1442,8 @@ static void TabPlayer() {
   EndCard();
 
   Card("Lobby Actions");
-  {
-    bool host = Game::IsHost();
-    bool canStart = host && Game::isInLobby;
-    if (!canStart)
-      ImGui::BeginDisabled();
-    if (GlowBtn("Force Start Game (Host)", {200, 28}))
-      Game::StartGame();
-    if (!canStart)
-      ImGui::EndDisabled();
-    if (!host)
-      ImGui::TextColored({0.7f, 0.55f, 0.4f, 1}, "Start requires host");
-    else if (!Game::isInLobby)
-      ImGui::TextColored({0.7f, 0.55f, 0.4f, 1}, "Only works in lobby");
-  }
+  if (GlowBtn("Force Start Game", {200, 28}))
+    Game::StartGame();
   if (GlowBtn("Force End Game", {180, 28}))
     Game::EndGame();
   EndCard();
@@ -1682,29 +1668,11 @@ static void TabMovement() {
 }
 
 static void TabFun() {
-  bool host = Game::IsHost();
-  Card("Character Effects (Host = network, Local = your screen only)");
-  {
-    if (!host)
-      ImGui::BeginDisabled();
-    if (Toggle("Rainbow Character (Host)", &g_rainbow)) {
-      if (!host)
-        g_rainbow = false;
-    }
-    if (Toggle("Spin Preview (Host)", &g_spin)) {
-      if (!host)
-        g_spin = false;
-    }
-    Toggle("Dance Animation (Host)", &g_dance);
-    if (!host && g_dance)
-      g_dance = false;
-    Toggle("Particle Effects (Host)", &g_particle);
-    if (!host && g_particle)
-      g_particle = false;
-    if (!host)
-      ImGui::EndDisabled();
-  }
-  // Local-only effects (safe for non-host)
+  Card("Character Effects");
+  Toggle("Rainbow Character", &g_rainbow);
+  Toggle("Spin Preview", &g_spin);
+  Toggle("Dance Animation", &g_dance);
+  Toggle("Particle Effects", &g_particle);
   if (Toggle("Tiny Character", &g_tiny)) {
     if (g_tiny) {
       g_giant = false;
@@ -1719,68 +1687,42 @@ static void TabFun() {
     } else
       Game::SetCharacterScale(1.0f);
   }
-  if (!host)
-    ImGui::TextColored({1, .85f, .3f, 1},
-                       "Network effects require Host. Local effects always work.");
   EndCard();
-  Card("Emotes (Host)");
-  {
-    if (!host)
-      ImGui::BeginDisabled();
-    const char *emotes[] = {"Wave", "Dance", "Clap", "Dab", "Flex"};
-    for (int i = 0; i < 5; i++) {
-      if (i)
-        ImGui::SameLine();
-      if (GlowBtn(emotes[i], {60, 28}))
-        Game::PlayAnimation((uint8_t)i);
-    }
-    if (!host)
-      ImGui::EndDisabled();
+  Card("Emotes");
+  const char *emotes[] = {"Wave", "Dance", "Clap", "Dab", "Flex"};
+  for (int i = 0; i < 5; i++) {
+    if (i)
+      ImGui::SameLine();
+    if (GlowBtn(emotes[i], {60, 28}))
+      Game::PlayAnimation((uint8_t)i);
   }
   EndCard();
 }
 
 static void TabTroll() {
-  bool host = Game::IsHost();
   Card("Server Trolls");
   Toggle("Chat Spam", &g_chatSpam);
   if (GlowBtn("Force Emergency Meeting", {200, 28}))
     Game::ForceEmergencyMeeting();
-  {
-    if (!host)
-      ImGui::BeginDisabled();
-    if (GlowBtn("Force Start Game (Host)", {200, 28}))
-      Game::StartGame();
-    if (!host)
-      ImGui::EndDisabled();
-  }
+  if (GlowBtn("Force Start Game", {200, 28}))
+    Game::StartGame();
   if (GlowBtn("Force End / Leave", {200, 28}))
     Game::EndGame();
   if (GlowBtn("Complete All Tasks", {200, 28}))
     Game::CompleteAllTasks();
   EndCard();
 
-  Card("Impostor Abilities (Host)");
-  {
-    if (!host)
-      ImGui::BeginDisabled();
-    if (GlowBtn("Vanish (Phantom)", {160, 28}))
-      Game::Vanish();
-    ImGui::SameLine();
-    if (GlowBtn("Appear", {100, 28}))
-      Game::Appear();
-    if (!host)
-      ImGui::EndDisabled();
-    if (!host)
-      ImGui::TextColored({1, .85f, .3f, 1}, "Requires Host to use.");
-  }
+  Card("Impostor Abilities");
+  if (GlowBtn("Vanish (Phantom)", {160, 28}))
+    Game::Vanish();
+  ImGui::SameLine();
+  if (GlowBtn("Appear", {100, 28}))
+    Game::Appear();
   EndCard();
 
-  Card("Shapeshift (Host)");
+  Card("Shapeshift");
   if (!Game::isInGame) {
     ImGui::TextColored({1, 0.3f, 0.3f, 1}, "Not in game");
-  } else if (!host) {
-    ImGui::TextColored({1, .85f, .3f, 1}, "Requires Host to use.");
   } else {
     for (int i = 0; i < (int)Game::players.size(); i++) {
       const auto &p = Game::players[i];
@@ -1794,12 +1736,9 @@ static void TabTroll() {
   }
   EndCard();
 
-  Card("Set Player Roles (Host)");
+  Card("Set Player Roles");
   if (!Game::isInGame) {
     ImGui::TextColored({1, 0.3f, 0.3f, 1}, "Not in game");
-  } else if (!host) {
-    ImGui::TextColored({1, .85f, .3f, 1},
-                       "Requires Host. Non-host role changes are local only.");
   } else {
     const char *roleNames[] = {"Crewmate",   "Impostor",       "Scientist",
                                "Engineer",   "Guardian Angel", "Shapeshifter",
@@ -1955,66 +1894,40 @@ static void TabTroll() {
   }
   EndCard();
 
-  Card("Vents (Host)");
-  {
-    if (!host)
-      ImGui::BeginDisabled();
-    static int ventId = 0;
-    ImGui::InputInt("Vent ID##v", &ventId);
-    if (GlowBtn("Enter Vent", {120, 28}))
-      Game::EnterVent(ventId);
-    ImGui::SameLine();
-    if (GlowBtn("Exit Vent", {120, 28}))
-      Game::ExitVent(ventId);
-    if (!host)
-      ImGui::EndDisabled();
-    if (!host)
-      ImGui::TextColored({1, .85f, .3f, 1}, "Requires Host to use vents.");
-  }
+  Card("Vents");
+  static int ventId = 0;
+  ImGui::InputInt("Vent ID##v", &ventId);
+  if (GlowBtn("Enter Vent", {120, 28}))
+    Game::EnterVent(ventId);
+  ImGui::SameLine();
+  if (GlowBtn("Exit Vent", {120, 28}))
+    Game::ExitVent(ventId);
   EndCard();
 
-  Card("Sabotage / Doors (Host)");
-  {
-    if (!host)
-      ImGui::BeginDisabled();
-    const char *rooms[] = {
-        "Hallway",    "Storage",  "Cafeteria",  "Reactor",      "Upper Engine",
-        "Navigation", "Admin",    "Electrical", "O2",           "Shields",
-        "MedBay",     "Security", "Weapons",    "Lower Engine", "Comms"};
-    static int doorRoom = 3;
-    ImGui::Combo("Room##doors", &doorRoom, rooms, 15);
-    if (GlowBtn("Close Doors", {140, 28}))
-      Game::CloseDoors(doorRoom);
-    ImGui::SameLine();
-    if (GlowBtn("Fix Sabotage", {140, 28}))
-      Game::RepairSabotage(doorRoom);
-    if (GlowBtn("Close ALL Doors", {200, 28}))
-      Game::CloseAllDoors();
-    ImGui::SameLine();
-    if (GlowBtn("Fix ALL Sabotage", {200, 28}))
-      Game::FixAllSabotage();
-    if (!host)
-      ImGui::EndDisabled();
-    if (!host)
-      ImGui::TextColored({1, .85f, .3f, 1}, "Requires Host to use.");
-  }
+  Card("Sabotage / Doors");
+  const char *rooms[] = {
+      "Hallway",    "Storage",  "Cafeteria",  "Reactor",      "Upper Engine",
+      "Navigation", "Admin",    "Electrical", "O2",           "Shields",
+      "MedBay",     "Security", "Weapons",    "Lower Engine", "Comms"};
+  static int doorRoom = 3;
+  ImGui::Combo("Room##doors", &doorRoom, rooms, 15);
+  if (GlowBtn("Close Doors", {140, 28}))
+    Game::CloseDoors(doorRoom);
+  ImGui::SameLine();
+  if (GlowBtn("Fix Sabotage", {140, 28}))
+    Game::RepairSabotage(doorRoom);
+  if (GlowBtn("Close ALL Doors", {200, 28}))
+    Game::CloseAllDoors();
+  ImGui::SameLine();
+  if (GlowBtn("Fix ALL Sabotage", {200, 28}))
+    Game::FixAllSabotage();
   EndCard();
 
-  Card("Mass Actions (Host)");
-  {
-    if (!host)
-      ImGui::BeginDisabled();
-    if (GlowBtn("Teleport ALL to Self", {220, 28}))
-      Game::TeleportAllToSelf();
-    Toggle("Color Cycle (Strobe)", &g_colorCycle);
-    if (!host && g_colorCycle)
-      g_colorCycle = false;
-    Toggle("Spam Animations", &g_spamAnim);
-    if (!host && g_spamAnim)
-      g_spamAnim = false;
-    if (!host)
-      ImGui::EndDisabled();
-  }
+  Card("Mass Actions");
+  if (GlowBtn("Teleport ALL to Self", {220, 28}))
+    Game::TeleportAllToSelf();
+  Toggle("Color Cycle (Strobe)", &g_colorCycle);
+  Toggle("Spam Animations", &g_spamAnim);
   EndCard();
 
   Card("Teleport To Player");
@@ -2047,17 +1960,11 @@ static void TabTroll() {
   }
   EndCard();
 
-  Card("Character Trolls (Host)");
-  {
-    if (!host)
-      ImGui::BeginDisabled();
-    if (GlowBtn("Play Kill Anim", {160, 28}))
-      Game::PlayAnimation(2);
-    if (GlowBtn("Play Scan Anim", {160, 28}))
-      Game::PlayAnimation(1);
-    if (!host)
-      ImGui::EndDisabled();
-  }
+  Card("Character Trolls");
+  if (GlowBtn("Play Kill Anim", {160, 28}))
+    Game::PlayAnimation(2);
+  if (GlowBtn("Play Scan Anim", {160, 28}))
+    Game::PlayAnimation(1);
   EndCard();
 }
 
@@ -2129,7 +2036,7 @@ static void TabCosmetics() {
     Game::SetNamePlate(g_nameplate);
   EndCard();
 
-  Card("Color (Host)");
+  Card("Color");
   static int g_colorId = 0;
   const char *colors[] = {"Red",    "Blue",  "Green",  "Pink",   "Orange",
                           "Yellow", "Black", "White",  "Purple", "Brown",
@@ -2140,17 +2047,8 @@ static void TabCosmetics() {
     ImGui::TextColored({.75f, .85f, 1, 1}, "Current Color: %s",
                        colors[Game::localColorId]);
   }
-  {
-    bool host = Game::IsHost();
-    if (!host)
-      ImGui::BeginDisabled();
-    if (ImGui::Combo("Body Color##c", &g_colorId, colors, 18))
-      Game::SetPlayerColor(g_colorId);
-    if (!host)
-      ImGui::EndDisabled();
-    if (!host)
-      ImGui::TextColored({1, .85f, .3f, 1}, "Requires Host to change color.");
-  }
+  if (ImGui::Combo("Body Color##c", &g_colorId, colors, 18))
+    Game::SetPlayerColor(g_colorId);
   EndCard();
 }
 

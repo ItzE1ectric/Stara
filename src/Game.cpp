@@ -801,7 +801,7 @@ static void UpdateInternal() {
     }
 
     // Fun toggles: these send RPCs that can cause kicks for non-host
-    if (g_rainbow && CanSendCosmeticRpc() && IsHost()) {
+    if (g_rainbow && CanSendCosmeticRpc()) {
       static int h = 0;
       h = (h + 1) % 18;
       if (gameAssembly) {
@@ -810,19 +810,19 @@ static void UpdateInternal() {
       }
     }
 
-    if (g_spin && gameAssembly && CanSendRpc() && IsHost()) {
+    if (g_spin && gameAssembly && CanSendRpc()) {
       auto fn = (RpcPlayAnimation_fn)(gameAssembly + g_rvaRpcPlayAnimation);
       fn(lp, 2, nullptr);
     }
 
-    if (g_dance && gameAssembly && CanSendRpc() && IsHost()) {
+    if (g_dance && gameAssembly && CanSendRpc()) {
       static uint8_t danceAnim = 0;
       auto fn = (RpcPlayAnimation_fn)(gameAssembly + g_rvaRpcPlayAnimation);
       fn(lp, danceAnim, nullptr);
       danceAnim = (uint8_t)((danceAnim + 1) % 3);
     }
 
-    if (g_particle && gameAssembly && CanSendCosmeticRpc() && IsHost()) {
+    if (g_particle && gameAssembly && CanSendCosmeticRpc()) {
       static int particleHue = 0;
       particleHue = (particleHue + 1) % 18;
       auto fn = (RpcSetColor_fn)(gameAssembly + g_rvaRpcSetColor);
@@ -912,16 +912,16 @@ static void UpdateInternal() {
         }
       }
 
-      // 7. Color Cycle — host only, non-host gets kicked
-      if (g_colorCycle && CanSendCosmeticRpc() && gameAssembly && IsHost()) {
+      // 7. Color Cycle
+      if (g_colorCycle && CanSendCosmeticRpc() && gameAssembly) {
         static int cc = 0;
         cc = (cc + 1) % 18;
         auto fn = (RpcSetColor_fn)(gameAssembly + g_rvaRpcSetColor);
         fn(lp, (uint8_t)cc, nullptr);
       }
 
-      // 8. Spam Animation — host only, non-host gets kicked
-      if (g_spamAnim && gameAssembly && CanSendRpc() && IsHost()) {
+      // 8. Spam Animation
+      if (g_spamAnim && gameAssembly && CanSendRpc()) {
         auto fn =
             (RpcPlayAnimation_fn)(gameAssembly + g_rvaRpcPlayAnimation);
         fn(lp, (uint8_t)(rand() % 3), nullptr);
@@ -937,8 +937,8 @@ static void UpdateInternal() {
         }
       }
 
-      // 10. Force Protect — host only (GA role validated by server)
-      if (g_forceProtect && gameAssembly && IsHost()) {
+      // 10. Force Protect
+      if (g_forceProtect && gameAssembly) {
         static float fpTimer = 0;
         fpTimer += 0.033f;
         if (fpTimer > 5.0f) {
@@ -1280,15 +1280,10 @@ void SetPlayerColor(int colorId) {
   void *lp = GetLocalPlayer();
   if (!IsValid(lp) || !gameAssembly)
     return;
-  // Write color locally so our client sees it immediately
-  void *data = *(void **)((uintptr_t)lp + 0x58);
-  // Only send the RPC if host — non-host RpcSetColor can trigger kicks
-  if (IsHost()) {
-    __try {
-      auto fn = (RpcSetColor_fn)(gameAssembly + g_rvaRpcSetColor);
-      fn(lp, (uint8_t)colorId, nullptr);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-    }
+  __try {
+    auto fn = (RpcSetColor_fn)(gameAssembly + g_rvaRpcSetColor);
+    fn(lp, (uint8_t)colorId, nullptr);
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
 }
 
@@ -1784,8 +1779,7 @@ void StartGame() {
   Attach();
   if (!gameAssembly || !AmongUsClient::klass)
     return;
-  // MalumMenu: requires isHost && isLobby to force-start
-  if (!IsHost() || !isInLobby)
+  if (!isInLobby)
     return;
   void *field =
       il2cpp_class_get_field_from_name(AmongUsClient::klass, "Instance");
@@ -1977,16 +1971,11 @@ static void ApplyRoleToPlayer(void *targetPc, int roleType) {
     }
   }
 
-  // 3. Network: RpcSetRole broadcasts to all clients — HOST ONLY
-  //    RVA: 0x5C99C0  signature: void(PlayerControl*, RoleTypes, bool,
-  //    MethodInfo*)
-  //    Non-host sending this RPC will be kicked by the server.
-  if (IsHost()) {
-    __try {
-      auto fn = (RpcSetRole_fn)(gameAssembly + g_rvaRpcSetRole);
-      fn(targetPc, (uint16_t)roleType, true, nullptr);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-    }
+  // 3. Network: RpcSetRole broadcasts to all clients
+  __try {
+    auto fn = (RpcSetRole_fn)(gameAssembly + g_rvaRpcSetRole);
+    fn(targetPc, (uint16_t)roleType, true, nullptr);
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
 }
 
@@ -2055,8 +2044,6 @@ typedef void(__cdecl *RpcMurderPlayer_fn)(void *, void *, bool, void *);
 
 void KillPlayer(int playerIndex) {
   Attach();
-  if (!IsHost())
-    return; // server validates impostor role — non-host gets kicked
   void *lp = GetLocalPlayer();
   void *target = ResolveTargetPlayer(playerIndex);
   if (!IsValid(lp) || !IsValid(target) || !gameAssembly)
@@ -2072,8 +2059,6 @@ void KillPlayer(int playerIndex) {
 
 void KillAllPlayers() {
   Attach();
-  if (!IsHost())
-    return;
   void *lp = GetLocalPlayer();
   if (!IsValid(lp) || !gameAssembly)
     return;
@@ -2187,8 +2172,7 @@ void SetLevel(int level) {
     void *data = *(void **)((uintptr_t)lp + 0x58);
     if (IsValid(data))
       *(uint32_t *)((uintptr_t)data + 0x44) = storedLevel;
-    // RpcSetLevel causes server kick for non-host — only local write is safe
-    if (IsHost() && gameAssembly) {
+    if (gameAssembly) {
       auto rpcSetLevel = (RpcSetLevel_fn)(gameAssembly + g_rvaRpcSetLevel);
       rpcSetLevel(lp, storedLevel, nullptr);
     }
@@ -2215,8 +2199,6 @@ void RevivePlayer() {
 
 void ShapeshiftTo(int playerIndex) {
   Attach();
-  if (!IsHost())
-    return; // server validates shapeshifter role — non-host gets kicked
   void *lp = GetLocalPlayer();
   void *target = ResolveTargetPlayer(playerIndex);
   if (!IsValid(lp) || !IsValid(target) || !gameAssembly)
@@ -2232,8 +2214,6 @@ void ShapeshiftTo(int playerIndex) {
 
 void Vanish() {
   Attach();
-  if (!IsHost())
-    return; // server validates phantom role — non-host gets kicked
   void *lp = GetLocalPlayer();
   if (!IsValid(lp) || !gameAssembly)
     return;
@@ -2248,8 +2228,6 @@ void Vanish() {
 
 void Appear() {
   Attach();
-  if (!IsHost())
-    return; // server validates phantom role — non-host gets kicked
   void *lp = GetLocalPlayer();
   if (!IsValid(lp) || !gameAssembly)
     return;
@@ -2264,8 +2242,6 @@ void Appear() {
 
 void EnterVent(int ventId) {
   Attach();
-  if (!IsHost())
-    return; // server validates impostor/engineer role — non-host gets kicked
   void *lp = GetLocalPlayer();
   if (!IsValid(lp) || !gameAssembly)
     return;
@@ -2281,8 +2257,6 @@ void EnterVent(int ventId) {
 
 void ExitVent(int ventId) {
   Attach();
-  if (!IsHost())
-    return;
   void *lp = GetLocalPlayer();
   if (!IsValid(lp) || !gameAssembly)
     return;
@@ -2300,8 +2274,6 @@ void ExitVent(int ventId) {
 
 void CloseDoors(int roomType) {
   Attach();
-  if (!IsHost())
-    return; // server validates authority — non-host gets kicked
   if (!ShipStatus::klass || !gameAssembly)
     return;
   void *field = il2cpp_class_get_field_from_name(ShipStatus::klass, "Instance");
@@ -2321,8 +2293,6 @@ void CloseDoors(int roomType) {
 
 void RepairSabotage(int systemType) {
   Attach();
-  if (!IsHost())
-    return; // server validates authority — non-host gets kicked
   if (!ShipStatus::klass || !gameAssembly)
     return;
   void *field = il2cpp_class_get_field_from_name(ShipStatus::klass, "Instance");
@@ -2356,8 +2326,6 @@ void TeleportToPlayer(int playerIndex) {
 
 void ProtectPlayer(int playerIndex) {
   Attach();
-  if (!IsHost())
-    return; // server validates Guardian Angel role — non-host gets kicked
   void *lp = GetLocalPlayer();
   void *target = ResolveTargetPlayer(playerIndex);
   if (!IsValid(lp) || !IsValid(target) || !gameAssembly)
@@ -2399,8 +2367,6 @@ void SendChat(const char *msg) {
 
 void TeleportAllToSelf() {
   Attach();
-  if (!IsHost())
-    return; // only host can teleport other players
   void *lp = GetLocalPlayer();
   if (!IsValid(lp) || !gameAssembly)
     return;
