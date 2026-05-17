@@ -353,8 +353,8 @@ bool Init() {
     if (!ShipStatus::klass)
       ShipStatus::klass = il2cpp_class_from_name(img, "", "ShipStatus");
     if (!GameOptionsManager::klass)
-      GameOptionsManager::klass = il2cpp_class_from_name(
-          img, "AmongUs.GameOptions", "GameOptionsManager");
+      GameOptionsManager::klass =
+          il2cpp_class_from_name(img, "", "GameOptionsManager");
     if (!Transform::klass)
       Transform::klass =
           il2cpp_class_from_name(img, "UnityEngine", "Transform");
@@ -633,21 +633,25 @@ static void UpdateInternal() {
     UnpatchAntiKick();
   }
 
-  // Determine isInGame: require AmongUsClient.Instance + LocalPlayer.
-  // MalumMenu: isInGame = AmongUsClient.Instance && GameState==Started && isPlayer
-  // We check AmongUsClient + LocalPlayer which is sufficient.
+  // Determine isInGame: require AmongUsClient.Instance + GameState==Started + LocalPlayer.
+  // InnerNetClient.GameState at offset 0x64: 0=NotJoined, 1=Joined, 2=Started, 3=Ended
   {
     bool hasClient = false;
+    bool gameStarted = false;
     if (AmongUsClient::klass) {
       void *field =
           il2cpp_class_get_field_from_name(AmongUsClient::klass, "Instance");
       void *inst = nullptr;
       if (field)
         il2cpp_field_static_get_value(field, &inst);
-      hasClient = IsValid(inst);
+      if (IsValid(inst)) {
+        hasClient = true;
+        int state = *(int *)((uintptr_t)inst + 0x64); // GameState
+        gameStarted = (state == 2); // Started
+      }
     }
     void *lp = GetLocalPlayer();
-    isInGame = hasClient && IsValid(lp);
+    isInGame = hasClient && gameStarted && IsValid(lp);
   }
 
   isInMeeting = false;
@@ -779,14 +783,16 @@ static void UpdateInternal() {
     }
 
     // ── New continuous toggle features ──
-    // 1. No Kill Cooldown — constantly reset kill timer to 0 (host-only per MalumMenu)
-    if (g_noKillCd && IsHost()) {
+    // 1. No Kill Cooldown — constantly reset kill timer to 0
+    if (g_noKillCd) {
       EnsurePlayerControlMethods();
       if (pc_setKillTimer_method) {
         float v = 0.f;
         void *p[1] = {&v};
         il2cpp_runtime_invoke(pc_setKillTimer_method, lp, p, nullptr);
       }
+      // Also write directly to the killTimer field as backup
+      *(float *)((uintptr_t)lp + 0x80) = 0.f;
     }
 
     // 2. Infinite Emergencies — set RemainingEmergencies to 999
@@ -1115,7 +1121,7 @@ void CompleteAllTasks() {
 
   __try {
     Il2CppList *list = (Il2CppList *)tasks;
-    if (!IsValid(list->items) || list->size <= 0 || list->size > 20)
+    if (!IsValid(list->items) || list->size <= 0 || list->size > 64)
       return;
     Il2CppArray *arr = (Il2CppArray *)list->items;
     for (int i = 0; i < list->size && i < arr->max_length; i++) {
@@ -1123,12 +1129,15 @@ void CompleteAllTasks() {
       if (!IsValid(task))
         continue;
       uint32_t taskId = *(uint32_t *)((uintptr_t)task + 0x14);
+      // Complete locally first
       if (pc_completeTask_method) {
         void *p[1] = {&taskId};
         il2cpp_runtime_invoke(pc_completeTask_method, lp, p, nullptr);
       }
+      // Then sync to network
       rpcCompleteTask(lp, taskId, nullptr);
       completedAny = true;
+      Sleep(20); // small delay between tasks to avoid server spam rejection
     }
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
@@ -1141,6 +1150,7 @@ void CompleteAllTasks() {
           il2cpp_runtime_invoke(pc_completeTask_method, lp, p, nullptr);
         }
         rpcCompleteTask(lp, taskId, nullptr);
+        Sleep(20);
       } __except (EXCEPTION_EXECUTE_HANDLER) {
       }
     }
@@ -1239,6 +1249,7 @@ void SetKillCooldown(float time) {
 }
 
 void SetKillDistance(float dist) {
+  Attach();
   if (!GameOptionsManager::klass)
     return;
   int killDistance = 1; // 0=Short, 1=Medium, 2=Long
@@ -2201,6 +2212,7 @@ void TeleportAllToSelf() {
 }
 
 void SetDiscussionTime(float time) {
+  Attach();
   if (!GameOptionsManager::klass)
     return;
   void *field = il2cpp_class_get_field_from_name(GameOptionsManager::klass,
@@ -2216,6 +2228,7 @@ void SetDiscussionTime(float time) {
 }
 
 void SetVotingTime(float time) {
+  Attach();
   if (!GameOptionsManager::klass)
     return;
   void *field = il2cpp_class_get_field_from_name(GameOptionsManager::klass,
@@ -2231,6 +2244,7 @@ void SetVotingTime(float time) {
 }
 
 void SetEmergencyCount(int count) {
+  Attach();
   if (GameOptionsManager::klass) {
     void *field = il2cpp_class_get_field_from_name(GameOptionsManager::klass,
                                                    "<Instance>k__BackingField");

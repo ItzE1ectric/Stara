@@ -1341,7 +1341,6 @@ static void TabDashboard() {
     Game::ForceEmergencyMeeting();
   EndCard();
 
-  DrawDumpExplorerCard();
   DrawDiscordProfileCard();
 }
 
@@ -1509,9 +1508,6 @@ static void TabVisuals() {
   Card("Effects");
   Toggle("RGB Accent##v", &g_rgbAccent);
   EndCard();
-
-  DrawPresetBankCard("Visual Preset Bank A (64 Usable)", 0, 64, false);
-  DrawPresetBankCard("Visual Preset Bank B (64 Usable)", 64, 64, false);
 }
 
 static void TabESP() {
@@ -1602,9 +1598,6 @@ static void TabESP() {
   }
   ImGui::Dummy({pw, ph});
   EndCard();
-
-  DrawPresetBankCard("ESP Preset Bank A (64 Usable)", 0, 64, true);
-  DrawPresetBankCard("ESP Preset Bank B (64 Usable)", 64, 64, true);
 }
 
 static void TabMovement() {
