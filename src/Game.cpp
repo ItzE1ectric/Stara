@@ -582,6 +582,35 @@ static bool TryGetPlayerWorldPos(void *pcObj, float &outX, float &outY) {
 
 static void UpdateCameraState(); // forward decl
 
+// Read color from PlayerControl.cosmetics.get_ColorId (SEH-safe helper)
+static int ReadColorId(void *pcObj) {
+  if (!IsValid(pcObj))
+    return -1;
+  static void *getColorId_method = nullptr;
+  static bool colorMethodResolved = false;
+  void *cosmetics = *(void **)((uintptr_t)pcObj + 0x3C); // PlayerControl.cosmetics
+  if (!IsValid(cosmetics))
+    return -1;
+  if (!colorMethodResolved) {
+    void *cosKlass = *(void **)cosmetics;
+    if (IsValid(cosKlass))
+      getColorId_method =
+          il2cpp_class_get_method_from_name(cosKlass, "get_ColorId", 0);
+    colorMethodResolved = true;
+  }
+  if (!getColorId_method)
+    return -1;
+  __try {
+    void *exc = nullptr;
+    void *boxed =
+        il2cpp_runtime_invoke(getColorId_method, cosmetics, nullptr, &exc);
+    if (!exc && IsValid(boxed))
+      return *(int *)((uintptr_t)boxed + sizeof(void *) * 2);
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
+  return -1;
+}
+
 static void UpdateInternal() {
   static float lastUpdateTime = 0;
   float currentTime = (float)ImGui::GetTime();
@@ -928,10 +957,10 @@ static void UpdateInternal() {
             localRoleName = p.roleName;
             // Read level from NetworkedPlayerInfo (offset 0x44)
             // Game stores level as (displayLevel - 1), so add 1 for display
-            if (IsValid(data)) {
+            if (IsValid(data))
               localLevel = (int)*(uint32_t *)((uintptr_t)data + 0x44) + 1;
-              localColorId = (int)*(uint8_t *)((uintptr_t)data + 0x34);
-            }
+            // Read color from CosmeticsLayer.get_ColorId
+            localColorId = ReadColorId(pcObj);
           } else {
             if (p.hasWorldPos)
               p.distance = sqrtf(powf(p.x - localX, 2) + powf(p.y - localY, 2));
