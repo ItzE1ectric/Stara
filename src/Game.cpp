@@ -722,8 +722,15 @@ static void UpdateInternal() {
       *(float *)((uintptr_t)phys + 0x34) = smoothedSpeed; // Speed field
     }
 
-    if (g_fullbright) {
-      SetFullbright(true);
+    {
+      static bool wasFbOn = false;
+      if (g_fullbright) {
+        SetFullbright(true);
+        wasFbOn = true;
+      } else if (wasFbOn) {
+        SetFullbright(false);
+        wasFbOn = false;
+      }
     }
 
     if (g_rainbow && CanSendCosmeticRpc()) {
@@ -784,96 +791,98 @@ static void UpdateInternal() {
     }
 
     // ── Continuous toggle features (in-game only) ──
-    if (!isInGame) goto skip_ingame_toggles;
-
-    // 1. No Kill Cooldown — constantly reset kill timer to 0
-    if (g_noKillCd) {
-      EnsurePlayerControlMethods();
-      if (pc_setKillTimer_method) {
-        float v = 0.f;
-        void *p[1] = {&v};
-        il2cpp_runtime_invoke(pc_setKillTimer_method, lp, p, nullptr);
+    if (isInGame) {
+      // 1. No Kill Cooldown — constantly reset kill timer to 0
+      if (g_noKillCd) {
+        EnsurePlayerControlMethods();
+        if (pc_setKillTimer_method) {
+          float v = 0.f;
+          void *p[1] = {&v};
+          il2cpp_runtime_invoke(pc_setKillTimer_method, lp, p, nullptr);
+        }
+        // Also write directly to the killTimer field as backup
+        *(float *)((uintptr_t)lp + 0x80) = 0.f;
       }
-      // Also write directly to the killTimer field as backup
-      *(float *)((uintptr_t)lp + 0x80) = 0.f;
-    }
 
-    // 2. Infinite Emergencies — set RemainingEmergencies to 999
-    if (g_infiniteEmergencies)
-      *(int *)((uintptr_t)lp + 0x84) = 999; // RemainingEmergencies
+      // 2. Infinite Emergencies — set RemainingEmergencies to 999
+      if (g_infiniteEmergencies)
+        *(int *)((uintptr_t)lp + 0x84) = 999; // RemainingEmergencies
 
-    // 3. Always Moveable — force moveable flag
-    if (g_alwaysMoveable)
-      *(bool *)((uintptr_t)lp + 0x38) = true; // moveable
+      // 3. Always Moveable — force moveable flag
+      if (g_alwaysMoveable)
+        *(bool *)((uintptr_t)lp + 0x38) = true; // moveable
 
-    // 4. Impostor Vision — set crew vision to impostor level via GameOptions
-    if (g_impostorVision && GameOptionsManager::klass) {
-      void *gomField = il2cpp_class_get_field_from_name(
-          GameOptionsManager::klass, "<Instance>k__BackingField");
-      void *gomInst = nullptr;
-      if (gomField)
-        il2cpp_field_static_get_value(gomField, &gomInst);
-      if (IsValid(gomInst)) {
-        void *opt = *(void **)((uintptr_t)gomInst + 0x18);
-        if (IsValid(opt)) {
-          float impVision = *(float *)((uintptr_t)opt + 0x20); // ImpostorLightMod
-          *(float *)((uintptr_t)opt + 0x1C) = impVision;       // CrewLightMod = ImpostorLightMod
+      // 4. Impostor Vision — set crew vision to impostor level via GameOptions
+      if (g_impostorVision && GameOptionsManager::klass) {
+        void *gomField = il2cpp_class_get_field_from_name(
+            GameOptionsManager::klass, "<Instance>k__BackingField");
+        void *gomInst = nullptr;
+        if (gomField)
+          il2cpp_field_static_get_value(gomField, &gomInst);
+        if (IsValid(gomInst)) {
+          void *opt = *(void **)((uintptr_t)gomInst + 0x18);
+          if (IsValid(opt)) {
+            float impVision =
+                *(float *)((uintptr_t)opt + 0x20); // ImpostorLightMod
+            *(float *)((uintptr_t)opt + 0x1C) =
+                impVision; // CrewLightMod = ImpostorLightMod
+          }
         }
       }
-    }
 
-    // 5. Max Report Distance — see/report bodies from anywhere
-    if (g_maxReportDist)
-      *(float *)((uintptr_t)lp + 0x34) = 9999.f; // MaxReportDistance
+      // 5. Max Report Distance — see/report bodies from anywhere
+      if (g_maxReportDist)
+        *(float *)((uintptr_t)lp + 0x34) = 9999.f; // MaxReportDistance
 
-    // 6. God Mode — prevent death by resetting IsDead
-    if (g_godmode) {
-      void *data = *(void **)((uintptr_t)lp + 0x58);
-      if (IsValid(data)) {
-        bool dead = *(bool *)((uintptr_t)data + 0x54);
-        *(bool *)((uintptr_t)data + 0x54) = false; // IsDead = false
-        *(bool *)((uintptr_t)data + 0x55) = false; // WasEjected = false
-        if (dead)
-          RevivePlayerControl(lp, false);
+      // 6. God Mode — prevent death by resetting IsDead
+      if (g_godmode) {
+        void *data = *(void **)((uintptr_t)lp + 0x58);
+        if (IsValid(data)) {
+          bool dead = *(bool *)((uintptr_t)data + 0x54);
+          *(bool *)((uintptr_t)data + 0x54) = false; // IsDead = false
+          *(bool *)((uintptr_t)data + 0x55) = false; // WasEjected = false
+          if (dead)
+            RevivePlayerControl(lp, false);
+        }
       }
-    }
 
-    // 7. Color Cycle — rate-limited to avoid spam
-    if (g_colorCycle && CanSendCosmeticRpc() && gameAssembly) {
-      static int cc = 0;
-      cc = (cc + 1) % 18;
-      auto fn = (RpcSetColor_fn)(gameAssembly + g_rvaRpcSetColor);
-      fn(lp, (uint8_t)cc, nullptr);
-    }
-
-    // 8. Spam Animation — rate-limited
-    if (g_spamAnim && gameAssembly && CanSendRpc()) {
-      auto fn = (RpcPlayAnimation_fn)(gameAssembly + g_rvaRpcPlayAnimation);
-      fn(lp, (uint8_t)(rand() % 3), nullptr);
-    }
-
-    // 9. Auto Tasks — complete tasks every 5 seconds
-    if (g_autoTasks) {
-      static float atTimer = 0;
-      atTimer += 0.1f;
-      if (atTimer > 5.0f) {
-        atTimer = 0;
-        CompleteAllTasks();
+      // 7. Color Cycle — rate-limited to avoid spam
+      if (g_colorCycle && CanSendCosmeticRpc() && gameAssembly) {
+        static int cc = 0;
+        cc = (cc + 1) % 18;
+        auto fn = (RpcSetColor_fn)(gameAssembly + g_rvaRpcSetColor);
+        fn(lp, (uint8_t)cc, nullptr);
       }
-    }
 
-    // 10. Force Protect — rate-limited to every 5s
-    if (g_forceProtect && gameAssembly) {
-      static float fpTimer = 0;
-      fpTimer += 0.1f;
-      if (fpTimer > 5.0f) {
-        fpTimer = 0;
-        auto fn = (RpcProtectPlayer_fn)(gameAssembly + g_rvaRpcProtectPlayer);
-        fn(lp, lp, 0, nullptr);
+      // 8. Spam Animation — rate-limited
+      if (g_spamAnim && gameAssembly && CanSendRpc()) {
+        auto fn =
+            (RpcPlayAnimation_fn)(gameAssembly + g_rvaRpcPlayAnimation);
+        fn(lp, (uint8_t)(rand() % 3), nullptr);
       }
-    }
 
-    skip_ingame_toggles:;
+      // 9. Auto Tasks — complete tasks every 5 seconds
+      if (g_autoTasks) {
+        static float atTimer = 0;
+        atTimer += 0.1f;
+        if (atTimer > 5.0f) {
+          atTimer = 0;
+          CompleteAllTasks();
+        }
+      }
+
+      // 10. Force Protect — rate-limited to every 5s
+      if (g_forceProtect && gameAssembly) {
+        static float fpTimer = 0;
+        fpTimer += 0.1f;
+        if (fpTimer > 5.0f) {
+          fpTimer = 0;
+          auto fn =
+              (RpcProtectPlayer_fn)(gameAssembly + g_rvaRpcProtectPlayer);
+          fn(lp, lp, 0, nullptr);
+        }
+      }
+    } // end isInGame toggles
   }
 
   if (PlayerControl::klass) {
@@ -2188,6 +2197,8 @@ void FixAllSabotage() {
 
 void SendChat(const char *msg) {
   Attach();
+  if (!msg || !msg[0])
+    return; // reject empty messages
   void *lp = GetLocalPlayer();
   if (!IsValid(lp) || !gameAssembly || !il2cpp_string_new)
     return;
@@ -2200,6 +2211,8 @@ void SendChat(const char *msg) {
 
 void TeleportAllToSelf() {
   Attach();
+  if (!IsHost())
+    return; // only host can teleport other players
   void *lp = GetLocalPlayer();
   if (!IsValid(lp) || !gameAssembly)
     return;

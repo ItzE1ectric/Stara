@@ -1892,8 +1892,15 @@ static void TabTroll() {
   EndCard();
 
   Card("Mass Actions");
-  if (GlowBtn("Teleport ALL to Self", {200, 28}))
-    Game::TeleportAllToSelf();
+  {
+    bool host = Game::IsHost();
+    if (!host)
+      ImGui::BeginDisabled();
+    if (GlowBtn("Teleport ALL to Self (Host)", {220, 28}))
+      Game::TeleportAllToSelf();
+    if (!host)
+      ImGui::EndDisabled();
+  }
   Toggle("Color Cycle (Strobe)", &g_colorCycle);
   Toggle("Spam Animations", &g_spamAnim);
   EndCard();
