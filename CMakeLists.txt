@@ -54,7 +54,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     imgui_lib
     nlohmann_json::nlohmann_json
     minhook
-    d3d11 dxgi dwmapi
+    d3d11 dxgi dwmapi shell32 windowscodecs ole32
 )
 
 set_target_properties(${PROJECT_NAME} PROPERTIES

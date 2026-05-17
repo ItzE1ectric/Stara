@@ -24,12 +24,19 @@ namespace Stara::Game {
     // Globals
     inline uintptr_t gameAssembly = 0;
     inline bool isInGame = false;
+    inline bool isInMeeting = false;
     inline float localX = 0, localY = 0;
     inline bool isImpostor = false;
+    inline uint16_t localRole = 0;
+    inline int localLevel = 0;
+    inline std::string localRoleName = "Unknown";
+    inline int localColorId = -1;
 
     struct PlayerInfo {
         std::string name;
+        int playerId;
         float x, y;
+        bool hasWorldPos;
         bool isImpostor;
         bool isDead;
         float distance;
@@ -66,11 +73,14 @@ namespace Stara::Game {
     namespace Behaviour { inline void* klass = nullptr; }
     namespace NetworkedPlayerInfo { inline void* klass = nullptr; }
     namespace RoleManager { inline void* klass = nullptr; }
+    namespace RoleBehaviour { inline void* klass = nullptr; }
+    namespace MeetingHud { inline void* klass = nullptr; }
 
     // Core Functions
     bool Init();
     void Update();
     void DrawESP(ImDrawList* drawList);
+    bool IsHost();
 
     // Cheats
     void SetSpeed(float speed);

@@ -1,37 +1,43 @@
 #include "Game.hpp"
+#include "DumpDatabase.hpp"
 #include <windows.h>
 
 namespace Stara::Game {
 
-// Direct RVA function typedefs (IL2CPP x86: ret func(this, params..., MethodInfo*))
-typedef void (__cdecl *RpcCompleteTask_fn)(void*, uint32_t, void*);
-typedef void (__cdecl *RpcStartMeeting_fn)(void*, void*, void*);
-typedef void (__cdecl *RpcSetColor_fn)(void*, uint8_t, void*);
-typedef void (__cdecl *RpcSetName_fn)(void*, void*, void*);
-typedef void (__cdecl *RpcSetHat_fn)(void*, void*, void*);
-typedef void (__cdecl *RpcSetPet_fn)(void*, void*, void*);
-typedef void (__cdecl *RpcSetSkin_fn)(void*, void*, void*);
-typedef bool (__cdecl *RpcSendChat_fn)(void*, void*, void*); // returns bool
-typedef void (__cdecl *RpcPlayAnimation_fn)(void*, uint8_t, void*);
-typedef void (__cdecl *RpcSnapTo_fn)(void*, float, float, void*);
-typedef void (__cdecl *StartGame_fn)(void*, void*);
-typedef void (__cdecl *RpcSetRole_fn)(void*, uint16_t, bool, void*);
-typedef void (__cdecl *CmdCheckMurder_fn)(void*, void*, void*);
-typedef void (__cdecl *CmdReportDeadBody_fn)(void*, void*, void*);
-typedef void (__cdecl *RpcSetVisor_fn)(void*, void*, void*);
-typedef void (__cdecl *RpcSetNamePlate_fn)(void*, void*, void*);
-typedef void (__cdecl *RpcSetLevel_fn)(void*, uint32_t, void*);
-typedef void (__cdecl *RpcShapeshift_fn)(void*, void*, bool, void*);
-typedef void (__cdecl *RpcVanish_fn)(void*, void*);
-typedef void (__cdecl *RpcAppear_fn)(void*, bool, void*);
-typedef void (__cdecl *RpcVent_fn)(void*, int, void*);
-typedef void (__cdecl *RpcCloseDoors_fn)(void*, int, void*);
-typedef void (__cdecl *RpcUpdateSystem_fn)(void*, int, uint8_t, void*);
-typedef void (__cdecl *RpcProtectPlayer_fn)(void*, void*, int, void*);
+// Direct RVA function typedefs (IL2CPP x86: ret func(this, params...,
+// MethodInfo*))
+typedef void(__cdecl *RpcCompleteTask_fn)(void *, uint32_t, void *);
+typedef void(__cdecl *RpcStartMeeting_fn)(void *, void *, void *);
+typedef void(__cdecl *RpcSetColor_fn)(void *, uint8_t, void *);
+typedef void(__cdecl *RpcSetName_fn)(void *, void *, void *);
+typedef void(__cdecl *RpcSetHat_fn)(void *, void *, void *);
+typedef void(__cdecl *RpcSetPet_fn)(void *, void *, void *);
+typedef void(__cdecl *RpcSetSkin_fn)(void *, void *, void *);
+typedef bool(__cdecl *RpcSendChat_fn)(void *, void *, void *); // returns bool
+typedef void(__cdecl *RpcPlayAnimation_fn)(void *, uint8_t, void *);
+typedef void(__cdecl *RpcSnapTo_fn)(void *, float, float, void *);
+typedef void(__cdecl *StartGame_fn)(void *, void *);
+typedef void(__cdecl *RpcSetRole_fn)(void *, uint16_t, bool, void *);
+typedef void(__cdecl *CmdCheckMurder_fn)(void *, void *, void *);
+typedef void(__cdecl *CmdReportDeadBody_fn)(void *, void *, void *);
+typedef void(__cdecl *RpcSetVisor_fn)(void *, void *, void *);
+typedef void(__cdecl *RpcSetNamePlate_fn)(void *, void *, void *);
+typedef void(__cdecl *RpcSetLevel_fn)(void *, uint32_t, void *);
+typedef void(__cdecl *RpcShapeshift_fn)(void *, void *, bool, void *);
+typedef void(__cdecl *RpcVanish_fn)(void *, void *);
+typedef void(__cdecl *RpcAppear_fn)(void *, bool, void *);
+typedef void(__cdecl *RpcVent_fn)(void *, int, void *);
+typedef void(__cdecl *RpcCloseDoors_fn)(void *, int, void *);
+typedef void(__cdecl *RpcUpdateSystem_fn)(void *, int, uint8_t, void *);
+typedef void(__cdecl *RpcProtectPlayer_fn)(void *, void *, int, void *);
 
 static void *gameDomain = nullptr;
 static bool threadAttached = false;
 static bool antiCheatPatched = false;
+static bool antiCheatPatchStateCaptured = false;
+static uint8_t g_origKickPlayerClient[8] = {};
+static uint8_t g_origKickPlayerServer[8] = {};
+static uint8_t g_origCanKick[8] = {};
 
 // Anti-cheat: rate limiter for RPCs to avoid server-side detection
 static DWORD lastRpcTick = 0;
@@ -39,7 +45,8 @@ static const DWORD RPC_MIN_INTERVAL_MS = 100; // 100ms min between RPCs
 
 static bool CanSendRpc() {
   DWORD now = GetTickCount();
-  if (now - lastRpcTick < RPC_MIN_INTERVAL_MS) return false;
+  if (now - lastRpcTick < RPC_MIN_INTERVAL_MS)
+    return false;
   lastRpcTick = now;
   return true;
 }
@@ -48,60 +55,225 @@ static bool CanSendRpc() {
 static DWORD lastCosmeticTick = 0;
 static bool CanSendCosmeticRpc() {
   DWORD now = GetTickCount();
-  if (now - lastCosmeticTick < 500) return false; // 500ms for cosmetics
+  if (now - lastCosmeticTick < 500)
+    return false; // 500ms for cosmetics
   lastCosmeticTick = now;
   return true;
 }
 
 template <typename T> static bool IsValid(T *ptr) {
-  if (!ptr || (uintptr_t)ptr < 0x10000 || (uintptr_t)ptr > 0x7FFFFFFF)
+  if (!ptr)
+    return false;
+
+  constexpr uintptr_t kMinUserAddr = 0x10000;
+#if INTPTR_MAX == INT64_MAX
+  constexpr uintptr_t kMaxUserAddr = 0x00007FFFFFFFFFFFULL;
+#else
+  constexpr uintptr_t kMaxUserAddr = 0x7FFFFFFF;
+#endif
+
+  uintptr_t p = (uintptr_t)ptr;
+  if (p < kMinUserAddr || p > kMaxUserAddr)
     return false;
   return true;
+}
+
+// Dump.cs-backed RVA table (fallbacks keep compatibility if dump is missing).
+static uintptr_t g_rvaHandleDisconnect = 0x6F9400;
+static uintptr_t g_rvaEnqueueDisconnect = 0x6F8020;
+static uintptr_t g_rvaDisconnectInternal = 0x6F7A00;
+static uintptr_t g_rvaOnDisconnect = 0x6FB700;
+static uintptr_t g_rvaKickPlayerClient = 0x6FB460;
+static uintptr_t g_rvaKickPlayerServer = 0x7011A0;
+static uintptr_t g_rvaCanKick = 0x6F7230;
+
+static uintptr_t g_rvaRpcSetColor = 0x5C9430;
+static uintptr_t g_rvaRpcPlayAnimation = 0x5C8D80;
+static uintptr_t g_rvaRpcProtectPlayer = 0x5C8E70;
+static uintptr_t g_rvaRpcCompleteTask = 0x5C8C20;
+static uintptr_t g_rvaRpcStartMeeting = 0x5C9F90;
+static uintptr_t g_rvaRpcSnapTo = 0x535E60;
+static uintptr_t g_rvaRpcSetName = 0x5C9790;
+static uintptr_t g_rvaRpcSetHat = 0x5C94F0;
+static uintptr_t g_rvaRpcSetPet = 0x5C9850;
+static uintptr_t g_rvaRpcSetSkin = 0x5C9BC0;
+static uintptr_t g_rvaRpcSendChat = 0x5C90C0;
+
+static uintptr_t g_rvaCameraGetMain = 0x1F18980;
+static uintptr_t g_rvaCameraGetOrthoSize = 0x1F18A70;
+
+static uintptr_t g_rvaAmongUsClientExitGame = 0x546850;
+static uintptr_t g_rvaAmongUsClientStartGame = 0x5487F0;
+static uintptr_t g_rvaAmongUsClientSendStartGame = 0x6FD880;
+
+static uintptr_t g_rvaRoleManagerSetRole = 0x60FA50;
+static uintptr_t g_rvaRpcSetRole = 0x5C99C0;
+static uintptr_t g_rvaMurderPlayer = 0x5C5D70;
+static uintptr_t g_rvaRpcMurderPlayer = 0x5C8CC0;
+static uintptr_t g_rvaCmdReportDeadBody = 0x5C2150;
+static uintptr_t g_rvaRpcSetVisor = 0x5C9D90;
+static uintptr_t g_rvaRpcSetNamePlate = 0x5C96C0;
+static uintptr_t g_rvaRpcSetLevel = 0x5C9620;
+static uintptr_t g_rvaRpcShapeshift = 0x5C9ED0;
+static uintptr_t g_rvaRpcVanish = 0x5CA3E0;
+static uintptr_t g_rvaRpcAppear = 0x5C8BA0;
+static uintptr_t g_rvaRpcEnterVent = 0x5E3250;
+static uintptr_t g_rvaRpcExitVent = 0x5E3340;
+static uintptr_t g_rvaRpcCloseDoorsOfType = 0x637E00;
+static uintptr_t g_rvaRpcUpdateSystem = 0x637EB0;
+
+static void ResolveRvasFromDump() {
+  using namespace DumpDatabase;
+  g_rvaHandleDisconnect =
+      GetMethodRva("InnerNetClient", "HandleDisconnect", g_rvaHandleDisconnect);
+  g_rvaEnqueueDisconnect = GetMethodRva("InnerNetClient", "EnqueueDisconnect",
+                                        g_rvaEnqueueDisconnect);
+  g_rvaDisconnectInternal = GetMethodRva("InnerNetClient", "DisconnectInternal",
+                                         g_rvaDisconnectInternal);
+  g_rvaOnDisconnect =
+      GetMethodRva("InnerNetClient", "OnDisconnect", g_rvaOnDisconnect);
+  g_rvaKickPlayerClient =
+      GetMethodRva("InnerNetClient", "KickPlayer", g_rvaKickPlayerClient);
+  g_rvaKickPlayerServer =
+      GetMethodRva("InnerNetServer", "KickPlayer", g_rvaKickPlayerServer);
+  g_rvaCanKick = GetMethodRva("InnerNetClient", "CanKick", g_rvaCanKick);
+
+  g_rvaRpcSetColor =
+      GetMethodRva("PlayerControl", "RpcSetColor", g_rvaRpcSetColor);
+  g_rvaRpcPlayAnimation =
+      GetMethodRva("PlayerControl", "RpcPlayAnimation", g_rvaRpcPlayAnimation);
+  g_rvaRpcProtectPlayer =
+      GetMethodRva("PlayerControl", "RpcProtectPlayer", g_rvaRpcProtectPlayer);
+  g_rvaRpcCompleteTask =
+      GetMethodRva("PlayerControl", "RpcCompleteTask", g_rvaRpcCompleteTask);
+  g_rvaRpcStartMeeting =
+      GetMethodRva("PlayerControl", "RpcStartMeeting", g_rvaRpcStartMeeting);
+  g_rvaRpcSnapTo =
+      GetMethodRva("CustomNetworkTransform", "RpcSnapTo", g_rvaRpcSnapTo);
+  g_rvaRpcSetName =
+      GetMethodRva("PlayerControl", "RpcSetName", g_rvaRpcSetName);
+  g_rvaRpcSetHat = GetMethodRva("PlayerControl", "RpcSetHat", g_rvaRpcSetHat);
+  g_rvaRpcSetPet = GetMethodRva("PlayerControl", "RpcSetPet", g_rvaRpcSetPet);
+  g_rvaRpcSetSkin =
+      GetMethodRva("PlayerControl", "RpcSetSkin", g_rvaRpcSetSkin);
+  g_rvaRpcSendChat =
+      GetMethodRva("PlayerControl", "RpcSendChat", g_rvaRpcSendChat);
+
+  g_rvaCameraGetMain = GetMethodRva("Camera", "get_main", g_rvaCameraGetMain);
+  g_rvaCameraGetOrthoSize =
+      GetMethodRva("Camera", "get_orthographicSize", g_rvaCameraGetOrthoSize);
+
+  g_rvaAmongUsClientExitGame =
+      GetMethodRva("AmongUsClient", "ExitGame", g_rvaAmongUsClientExitGame);
+  g_rvaAmongUsClientStartGame =
+      GetMethodRva("AmongUsClient", "StartGame", g_rvaAmongUsClientStartGame);
+  // SendStartGame is on InnerNetClient (base class of AmongUsClient)
+  g_rvaAmongUsClientSendStartGame = GetMethodRva(
+      "InnerNetClient", "SendStartGame", g_rvaAmongUsClientSendStartGame);
+
+  g_rvaRoleManagerSetRole =
+      GetMethodRva("RoleManager", "SetRole", g_rvaRoleManagerSetRole);
+  g_rvaRpcSetRole =
+      GetMethodRva("PlayerControl", "RpcSetRole", g_rvaRpcSetRole);
+  g_rvaMurderPlayer =
+      GetMethodRva("PlayerControl", "MurderPlayer", g_rvaMurderPlayer);
+  g_rvaRpcMurderPlayer =
+      GetMethodRva("PlayerControl", "RpcMurderPlayer", g_rvaRpcMurderPlayer);
+  g_rvaCmdReportDeadBody = GetMethodRva("PlayerControl", "CmdReportDeadBody",
+                                        g_rvaCmdReportDeadBody);
+  g_rvaRpcSetVisor =
+      GetMethodRva("PlayerControl", "RpcSetVisor", g_rvaRpcSetVisor);
+  g_rvaRpcSetNamePlate =
+      GetMethodRva("PlayerControl", "RpcSetNamePlate", g_rvaRpcSetNamePlate);
+  g_rvaRpcSetLevel =
+      GetMethodRva("PlayerControl", "RpcSetLevel", g_rvaRpcSetLevel);
+  g_rvaRpcShapeshift =
+      GetMethodRva("PlayerControl", "RpcShapeshift", g_rvaRpcShapeshift);
+  g_rvaRpcVanish = GetMethodRva("PlayerControl", "RpcVanish", g_rvaRpcVanish);
+  g_rvaRpcAppear = GetMethodRva("PlayerControl", "RpcAppear", g_rvaRpcAppear);
+  g_rvaRpcEnterVent =
+      GetMethodRva("PlayerPhysics", "RpcEnterVent", g_rvaRpcEnterVent);
+  g_rvaRpcExitVent =
+      GetMethodRva("PlayerPhysics", "RpcExitVent", g_rvaRpcExitVent);
+  g_rvaRpcCloseDoorsOfType = GetMethodRva("ShipStatus", "RpcCloseDoorsOfType",
+                                          g_rvaRpcCloseDoorsOfType);
+  g_rvaRpcUpdateSystem =
+      GetMethodRva("ShipStatus", "RpcUpdateSystem", g_rvaRpcUpdateSystem);
 }
 
 // NOP helper: patches a function to immediately return
 static void PatchToRet(uintptr_t addr) {
   DWORD oldProt;
-  if (VirtualProtect((void*)addr, 4, PAGE_EXECUTE_READWRITE, &oldProt)) {
-    *(uint8_t*)(addr)     = 0xC3; // ret
-    *(uint8_t*)(addr + 1) = 0x90; // nop
-    *(uint8_t*)(addr + 2) = 0x90; // nop
-    VirtualProtect((void*)addr, 4, oldProt, &oldProt);
+  if (VirtualProtect((void *)addr, 4, PAGE_EXECUTE_READWRITE, &oldProt)) {
+    *(uint8_t *)(addr) = 0xC3;     // ret
+    *(uint8_t *)(addr + 1) = 0x90; // nop
+    *(uint8_t *)(addr + 2) = 0x90; // nop
+    VirtualProtect((void *)addr, 4, oldProt, &oldProt);
   }
 }
 
 // NOP helper: patches a bool-returning function to always return false
 static void PatchToRetFalse(uintptr_t addr) {
   DWORD oldProt;
-  if (VirtualProtect((void*)addr, 4, PAGE_EXECUTE_READWRITE, &oldProt)) {
-    *(uint8_t*)(addr)     = 0x31; // xor eax, eax
-    *(uint8_t*)(addr + 1) = 0xC0;
-    *(uint8_t*)(addr + 2) = 0xC3; // ret
-    VirtualProtect((void*)addr, 4, oldProt, &oldProt);
+  if (VirtualProtect((void *)addr, 4, PAGE_EXECUTE_READWRITE, &oldProt)) {
+    *(uint8_t *)(addr) = 0x31; // xor eax, eax
+    *(uint8_t *)(addr + 1) = 0xC0;
+    *(uint8_t *)(addr + 2) = 0xC3; // ret
+    VirtualProtect((void *)addr, 4, oldProt, &oldProt);
   }
 }
 
 static void PatchAntiKick() {
-  if (antiCheatPatched || !gameAssembly) return;
-  
-  // Patch ALL disconnect/kick handlers so the client ignores server kicks:
-  // AmongUsClient.HandleDisconnect — RVA: 0x6F9400
-  PatchToRet(gameAssembly + 0x6F9400);
-  // AmongUsClient.EnqueueDisconnect — RVA: 0x6F8020
-  PatchToRet(gameAssembly + 0x6F8020);
-  // AmongUsClient.DisconnectInternal — RVA: 0x6F7A00
-  PatchToRet(gameAssembly + 0x6F7A00);
-  // AmongUsClient.OnDisconnect — RVA: 0x6FB700
-  PatchToRet(gameAssembly + 0x6FB700);
-  // AmongUsClient.KickPlayer — RVA: 0x6FB460
-  PatchToRet(gameAssembly + 0x6FB460);
-  // InnerNetServer.KickPlayer — RVA: 0x7011A0
-  PatchToRet(gameAssembly + 0x7011A0);
-  // CanKick() -> always false — RVA: 0x6F7230
-  PatchToRetFalse(gameAssembly + 0x6F7230);
-  
+  if (antiCheatPatched || !gameAssembly)
+    return;
+
+  // Safe anti-kick mode:
+  // Patch only kick checks/handlers, DO NOT patch core disconnect handlers.
+  // Patching disconnect flow causes "frozen lobby" ghost states after server
+  // drops.
+  uintptr_t kickClient = gameAssembly + g_rvaKickPlayerClient;
+  uintptr_t kickServer = gameAssembly + g_rvaKickPlayerServer;
+  uintptr_t canKick = gameAssembly + g_rvaCanKick;
+
+  if (!antiCheatPatchStateCaptured) {
+    memcpy(g_origKickPlayerClient, (void *)kickClient, 4);
+    memcpy(g_origKickPlayerServer, (void *)kickServer, 4);
+    memcpy(g_origCanKick, (void *)canKick, 4);
+    antiCheatPatchStateCaptured = true;
+  }
+
+  PatchToRet(kickClient);
+  PatchToRet(kickServer);
+  PatchToRetFalse(canKick);
+
   antiCheatPatched = true;
-  printf("[+] Anti-cheat: All disconnect/kick handlers patched\n");
+  printf("[+] Anti-kick enabled (safe mode)\n");
+}
+
+static void UnpatchAntiKick() {
+  if (!antiCheatPatched || !gameAssembly || !antiCheatPatchStateCaptured)
+    return;
+
+  uintptr_t kickClient = gameAssembly + g_rvaKickPlayerClient;
+  uintptr_t kickServer = gameAssembly + g_rvaKickPlayerServer;
+  uintptr_t canKick = gameAssembly + g_rvaCanKick;
+
+  DWORD oldProt = 0;
+  if (VirtualProtect((void *)kickClient, 4, PAGE_EXECUTE_READWRITE, &oldProt)) {
+    memcpy((void *)kickClient, g_origKickPlayerClient, 4);
+    VirtualProtect((void *)kickClient, 4, oldProt, &oldProt);
+  }
+  if (VirtualProtect((void *)kickServer, 4, PAGE_EXECUTE_READWRITE, &oldProt)) {
+    memcpy((void *)kickServer, g_origKickPlayerServer, 4);
+    VirtualProtect((void *)kickServer, 4, oldProt, &oldProt);
+  }
+  if (VirtualProtect((void *)canKick, 4, PAGE_EXECUTE_READWRITE, &oldProt)) {
+    memcpy((void *)canKick, g_origCanKick, 4);
+    VirtualProtect((void *)canKick, 4, oldProt, &oldProt);
+  }
+
+  antiCheatPatched = false;
+  printf("[+] Anti-kick disabled\n");
 }
 
 // Speed clamp: prevent server-side speed detection
@@ -190,10 +362,21 @@ bool Init() {
           il2cpp_class_from_name(img, "", "NetworkedPlayerInfo");
     if (!RoleManager::klass)
       RoleManager::klass = il2cpp_class_from_name(img, "", "RoleManager");
+    if (!RoleBehaviour::klass)
+      RoleBehaviour::klass = il2cpp_class_from_name(img, "", "RoleBehaviour");
+    if (!MeetingHud::klass)
+      MeetingHud::klass = il2cpp_class_from_name(img, "", "MeetingHud");
   }
 
-  // Apply anti-cheat patches
-  PatchAntiKick();
+  DumpDatabase::AutoLoad();
+  if (DumpDatabase::IsLoaded()) {
+    printf("[+] Dump.cs linked (%zu methods, %zu fields, %zu types)\n",
+           DumpDatabase::MethodCount(), DumpDatabase::FieldCount(),
+           DumpDatabase::ClassCount());
+  } else {
+    printf("[!] Dump.cs not found. Using built-in RVA fallbacks.\n");
+  }
+  ResolveRvasFromDump();
 
   return (PlayerControl::klass && GameData::klass && AmongUsClient::klass &&
           GameOptionsManager::klass && Transform::klass && Behaviour::klass);
@@ -211,7 +394,76 @@ void *GetLocalPlayer() {
   return IsValid(lp) ? lp : nullptr;
 }
 
+// Check if we are the host (MalumMenu: AmongUsClient.Instance.AmHost)
+bool IsHost() {
+  if (!AmongUsClient::klass)
+    return false;
+  void *field =
+      il2cpp_class_get_field_from_name(AmongUsClient::klass, "Instance");
+  void *inst = nullptr;
+  if (field)
+    il2cpp_field_static_get_value(field, &inst);
+  if (!IsValid(inst))
+    return false;
+  __try {
+    static void *amHost_method = nullptr;
+    static bool methodResolved = false;
+    if (!methodResolved) {
+      // Try AmongUsClient first, then its parent InnerNetClient
+      amHost_method = il2cpp_class_get_method_from_name(
+          AmongUsClient::klass, "get_AmHost", 0);
+      methodResolved = true;
+    }
+    if (!amHost_method)
+      return false;
+    void *exc = nullptr;
+    void *result = il2cpp_runtime_invoke(amHost_method, inst, nullptr, &exc);
+    if (exc || !IsValid(result))
+      return false;
+    return *(bool *)((uintptr_t)result + sizeof(void *) * 2); // unbox bool
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return false;
+  }
+}
+
 static void *get_playerName_method = nullptr;
+static void *pc_setName_method = nullptr;
+static void *pc_setLevel_method = nullptr;
+static void *pc_setKillTimer_method = nullptr;
+static void *pc_revive_method = nullptr;
+static void *pc_completeTask_method = nullptr;
+static void *pc_getTruePosition_method = nullptr;
+static void *rb_getIsImpostor_method = nullptr;
+static std::unordered_map<int, float> g_frozenPlayerSpeeds;
+static bool g_freezeWasActive = false;
+static void ApplyRoleToPlayer(void *targetPc, int roleType);
+static void RevivePlayerControl(void *playerControl, bool syncRole);
+
+static void EnsurePlayerControlMethods() {
+  if (!PlayerControl::klass || !il2cpp_class_get_method_from_name)
+    return;
+  if (!pc_setName_method)
+    pc_setName_method =
+        il2cpp_class_get_method_from_name(PlayerControl::klass, "SetName", 1);
+  if (!pc_setLevel_method)
+    pc_setLevel_method =
+        il2cpp_class_get_method_from_name(PlayerControl::klass, "SetLevel", 1);
+  if (!pc_setKillTimer_method)
+    pc_setKillTimer_method = il2cpp_class_get_method_from_name(
+        PlayerControl::klass, "SetKillTimer", 1);
+  if (!pc_revive_method)
+    pc_revive_method =
+        il2cpp_class_get_method_from_name(PlayerControl::klass, "Revive", 0);
+  if (!pc_completeTask_method)
+    pc_completeTask_method = il2cpp_class_get_method_from_name(
+        PlayerControl::klass, "CompleteTask", 1);
+  if (!pc_getTruePosition_method)
+    pc_getTruePosition_method = il2cpp_class_get_method_from_name(
+        PlayerControl::klass, "GetTruePosition", 0);
+  if (!rb_getIsImpostor_method && RoleBehaviour::klass)
+    rb_getIsImpostor_method = il2cpp_class_get_method_from_name(
+        RoleBehaviour::klass, "get_IsImpostor", 0);
+}
 
 // SEH helper: validate and read Il2CppString length safely
 static bool SafeReadStringData(void *str, int32_t *outLen, wchar_t **outChars) {
@@ -228,7 +480,7 @@ static bool SafeReadStringData(void *str, int32_t *outLen, wchar_t **outChars) {
     *outLen = is->length;
     *outChars = is->chars;
     return true;
-  } __except(EXCEPTION_EXECUTE_HANDLER) {
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
     return false;
   }
 }
@@ -240,8 +492,14 @@ static std::string ReadIl2CppString(void *str) {
   wchar_t *chars = nullptr;
   if (!SafeReadStringData(str, &len, &chars))
     return "Unknown";
-  std::wstring ws(chars, len);
-  return std::string(ws.begin(), ws.end());
+  int needed =
+      WideCharToMultiByte(CP_UTF8, 0, chars, len, nullptr, 0, nullptr, nullptr);
+  if (needed <= 0)
+    return "Unknown";
+  std::string out((size_t)needed, '\0');
+  WideCharToMultiByte(CP_UTF8, 0, chars, len, out.data(), needed, nullptr,
+                      nullptr);
+  return out;
 }
 
 static std::string GetRoleName(uint16_t roleType) {
@@ -277,13 +535,58 @@ static std::string GetRoleName(uint16_t roleType) {
   }
 }
 
+static bool TryReadBoxedBool(void *boxed, bool &out) {
+  if (!IsValid(boxed))
+    return false;
+  __try {
+    out = *(bool *)((uintptr_t)boxed + sizeof(void *) * 2);
+    return true;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return false;
+  }
+}
+
+static bool TryGetPlayerWorldPos(void *pcObj, float &outX, float &outY) {
+  if (!IsValid(pcObj))
+    return false;
+
+  EnsurePlayerControlMethods();
+  if (pc_getTruePosition_method) {
+    void *posBox = il2cpp_runtime_invoke(pc_getTruePosition_method, pcObj,
+                                         nullptr, nullptr);
+    if (IsValid(posBox)) {
+      // Boxed Vector2 layout: klass, monitor, then x/y payload.
+      float *xy = (float *)((uintptr_t)posBox + sizeof(void *) * 2);
+      if (std::isfinite(xy[0]) && std::isfinite(xy[1]) &&
+          fabsf(xy[0]) < 5000.f && fabsf(xy[1]) < 5000.f) {
+        outX = xy[0];
+        outY = xy[1];
+        return true;
+      }
+    }
+  }
+
+  // Fallback to CustomNetworkTransform.lastPosition.
+  void *pcNt = *(void **)((uintptr_t)pcObj + 0x98);
+  if (!IsValid(pcNt))
+    return false;
+  float x = *(float *)((uintptr_t)pcNt + 0x44);
+  float y = *(float *)((uintptr_t)pcNt + 0x48);
+  if (!std::isfinite(x) || !std::isfinite(y) || fabsf(x) > 5000.f ||
+      fabsf(y) > 5000.f)
+    return false;
+  outX = x;
+  outY = y;
+  return true;
+}
+
 static void UpdateCameraState(); // forward decl
 
 static void UpdateInternal() {
   static float lastUpdateTime = 0;
   float currentTime = (float)ImGui::GetTime();
 
-  if (currentTime - lastUpdateTime < 0.1f)
+  if (currentTime - lastUpdateTime < 0.033f)
     return;
   lastUpdateTime = currentTime;
 
@@ -291,17 +594,42 @@ static void UpdateInternal() {
     return;
   Attach();
 
-  if (AmongUsClient::klass) {
+  if (g_antiKick) {
+    PatchAntiKick();
+  } else {
+    UnpatchAntiKick();
+  }
+
+  // Determine isInGame: require AmongUsClient.Instance + LocalPlayer.
+  // MalumMenu: isInGame = AmongUsClient.Instance && GameState==Started && isPlayer
+  // We check AmongUsClient + LocalPlayer which is sufficient.
+  {
+    bool hasClient = false;
+    if (AmongUsClient::klass) {
+      void *field =
+          il2cpp_class_get_field_from_name(AmongUsClient::klass, "Instance");
+      void *inst = nullptr;
+      if (field)
+        il2cpp_field_static_get_value(field, &inst);
+      hasClient = IsValid(inst);
+    }
+    void *lp = GetLocalPlayer();
+    isInGame = hasClient && IsValid(lp);
+  }
+
+  isInMeeting = false;
+  if (MeetingHud::klass) {
     void *field =
-        il2cpp_class_get_field_from_name(AmongUsClient::klass, "Instance");
-    void *inst = nullptr;
+        il2cpp_class_get_field_from_name(MeetingHud::klass, "Instance");
+    void *meeting = nullptr;
     if (field)
-      il2cpp_field_static_get_value(field, &inst);
-    isInGame = IsValid(inst);
+      il2cpp_field_static_get_value(field, &meeting);
+    isInMeeting = IsValid(meeting);
   }
 
   if (!isInGame) {
     players.clear();
+    isInMeeting = false;
     return;
   }
 
@@ -309,8 +637,8 @@ static void UpdateInternal() {
   UpdateCameraState();
 
   if (!get_playerName_method && GameData::klass) {
-    get_playerName_method =
-        il2cpp_class_get_method_from_name(NetworkedPlayerInfo::klass, "get_PlayerName", 0);
+    get_playerName_method = il2cpp_class_get_method_from_name(
+        NetworkedPlayerInfo::klass, "get_PlayerName", 0);
   }
 
   void *lp = GetLocalPlayer();
@@ -319,13 +647,20 @@ static void UpdateInternal() {
     if (IsValid(nt)) {
       localX = *(float *)((uintptr_t)nt + 0x44); // lastPosition.x
       localY = *(float *)((uintptr_t)nt + 0x48); // lastPosition.y
+    } else {
+      float tx = 0.f, ty = 0.f;
+      if (TryGetPlayerWorldPos(lp, tx, ty)) {
+        localX = tx;
+        localY = ty;
+      }
     }
 
     // NoClip: properly disable collision without freezing player
     {
       static void *set_enabled_method = nullptr;
       if (!set_enabled_method && Behaviour::klass)
-        set_enabled_method = il2cpp_class_get_method_from_name(Behaviour::klass, "set_enabled", 1);
+        set_enabled_method = il2cpp_class_get_method_from_name(
+            Behaviour::klass, "set_enabled", 1);
       void *coll = *(void **)((uintptr_t)lp + 0x90); // Collider2D
       if (IsValid(coll) && set_enabled_method) {
         bool val = !g_noclip; // true = collider on, false = collider off
@@ -338,7 +673,15 @@ static void UpdateInternal() {
 
     void *phys = *(void **)((uintptr_t)lp + 0x94); // MyPhysics
     if (IsValid(phys)) {
-      *(float *)((uintptr_t)phys + 0x34) = g_speed; // Speed field
+      static float smoothedSpeed = 2.5f;
+      float desiredSpeed = (g_walkSpeed > 0.01f) ? g_walkSpeed : g_speed;
+      desiredSpeed = std::clamp(desiredSpeed, 0.5f, 15.f);
+      if (g_smoothMove) {
+        smoothedSpeed += (desiredSpeed - smoothedSpeed) * 0.18f;
+      } else {
+        smoothedSpeed = desiredSpeed;
+      }
+      *(float *)((uintptr_t)phys + 0x34) = smoothedSpeed; // Speed field
     }
 
     if (g_fullbright) {
@@ -349,20 +692,69 @@ static void UpdateInternal() {
       static int h = 0;
       h = (h + 1) % 18;
       if (gameAssembly) {
-        auto fn = (RpcSetColor_fn)(gameAssembly + 0x5C9430);
+        auto fn = (RpcSetColor_fn)(gameAssembly + g_rvaRpcSetColor);
         fn(lp, (uint8_t)h, nullptr);
       }
     }
 
     if (g_spin && gameAssembly && CanSendRpc()) {
-      auto fn = (RpcPlayAnimation_fn)(gameAssembly + 0x5C8D80);
+      auto fn = (RpcPlayAnimation_fn)(gameAssembly + g_rvaRpcPlayAnimation);
       fn(lp, 2, nullptr);
     }
 
+    if (g_dance && gameAssembly && CanSendRpc()) {
+      static uint8_t danceAnim = 0;
+      auto fn = (RpcPlayAnimation_fn)(gameAssembly + g_rvaRpcPlayAnimation);
+      fn(lp, danceAnim, nullptr);
+      danceAnim = (uint8_t)((danceAnim + 1) % 3);
+    }
+
+    if (g_particle && gameAssembly && CanSendCosmeticRpc()) {
+      // Cycle color while particle mode is active so the visual effect is
+      // obvious.
+      static int particleHue = 0;
+      particleHue = (particleHue + 1) % 18;
+      auto fn = (RpcSetColor_fn)(gameAssembly + g_rvaRpcSetColor);
+      fn(lp, (uint8_t)particleHue, nullptr);
+    }
+
+    {
+      static bool pathInit = false;
+      static float anchorX = 0.f, anchorY = 0.f;
+      static float theta = 0.f;
+      static float pathTimer = 0.f;
+      // Reset state when toggled off so anchor re-centers next enable
+      if (!g_autoPath) {
+        pathInit = false;
+      } else if (gameAssembly) {
+        if (!pathInit) {
+          pathInit = true;
+          anchorX = localX;
+          anchorY = localY;
+          theta = 0.f;
+          pathTimer = 0.f;
+        }
+        pathTimer += 0.1f;
+        if (pathTimer >= 0.2f) {
+          pathTimer = 0.f;
+          theta += 0.28f;
+          float radius = 0.85f;
+          TeleportTo(anchorX + cosf(theta) * radius,
+                     anchorY + sinf(theta) * radius);
+        }
+      }
+    }
+
     // ── New continuous toggle features ──
-    // 1. No Kill Cooldown — constantly reset kill timer to 0
-    if (g_noKillCd)
-      *(float *)((uintptr_t)lp + 0x80) = 0.f; // killTimer = 0
+    // 1. No Kill Cooldown — constantly reset kill timer to 0 (host-only per MalumMenu)
+    if (g_noKillCd && IsHost()) {
+      EnsurePlayerControlMethods();
+      if (pc_setKillTimer_method) {
+        float v = 0.f;
+        void *p[1] = {&v};
+        il2cpp_runtime_invoke(pc_setKillTimer_method, lp, p, nullptr);
+      }
+    }
 
     // 2. Infinite Emergencies — set RemainingEmergencies to 999
     if (g_infiniteEmergencies)
@@ -383,21 +775,26 @@ static void UpdateInternal() {
     // 6. God Mode — prevent death by resetting IsDead
     if (g_godmode) {
       void *data = *(void **)((uintptr_t)lp + 0x58);
-      if (IsValid(data))
+      if (IsValid(data)) {
+        bool dead = *(bool *)((uintptr_t)data + 0x54);
         *(bool *)((uintptr_t)data + 0x54) = false; // IsDead = false
+        *(bool *)((uintptr_t)data + 0x55) = false; // WasEjected = false
+        if (dead)
+          RevivePlayerControl(lp, false);
+      }
     }
 
     // 7. Color Cycle — rate-limited to avoid spam
     if (g_colorCycle && CanSendCosmeticRpc() && gameAssembly) {
       static int cc = 0;
       cc = (cc + 1) % 18;
-      auto fn = (RpcSetColor_fn)(gameAssembly + 0x5C9430);
+      auto fn = (RpcSetColor_fn)(gameAssembly + g_rvaRpcSetColor);
       fn(lp, (uint8_t)cc, nullptr);
     }
 
     // 8. Spam Animation — rate-limited
     if (g_spamAnim && gameAssembly && CanSendRpc()) {
-      auto fn = (RpcPlayAnimation_fn)(gameAssembly + 0x5C8D80);
+      auto fn = (RpcPlayAnimation_fn)(gameAssembly + g_rvaRpcPlayAnimation);
       fn(lp, (uint8_t)(rand() % 3), nullptr);
     }
 
@@ -417,7 +814,7 @@ static void UpdateInternal() {
       fpTimer += 0.1f;
       if (fpTimer > 5.0f) {
         fpTimer = 0;
-        auto fn = (RpcProtectPlayer_fn)(gameAssembly + 0x5C8E70);
+        auto fn = (RpcProtectPlayer_fn)(gameAssembly + g_rvaRpcProtectPlayer);
         fn(lp, lp, 0, nullptr);
       }
     }
@@ -446,7 +843,7 @@ static void UpdateInternal() {
       };
 
       SystemList *list = (SystemList *)allPlayersList;
-      if (IsValid(list->items) && list->size > 0 && list->size <= 15) {
+      if (IsValid(list->items) && list->size > 0 && list->size <= 32) {
         SystemArray *arr = (SystemArray *)list->items;
         std::vector<PlayerInfo> temp;
 
@@ -459,51 +856,119 @@ static void UpdateInternal() {
           if (!IsValid(data))
             continue;
 
+          int pid = (int)*(uint8_t *)((uintptr_t)pcObj + 0x28);
+
           // 11. Freeze All — local visual only (sets speed locally)
           if (g_freezeAll && pcObj != lp) {
             void *phys2 = *(void **)((uintptr_t)pcObj + 0x94);
-            if (IsValid(phys2))
+            if (IsValid(phys2)) {
+              if (!g_frozenPlayerSpeeds.count(pid))
+                g_frozenPlayerSpeeds[pid] = *(float *)((uintptr_t)phys2 + 0x34);
               *(float *)((uintptr_t)phys2 + 0x34) = 0.f;
+            }
           }
 
-          PlayerInfo p;
+          PlayerInfo p{};
+          p.playerId = pid;
           p.isDead = *(bool *)((uintptr_t)data + 0x54);
+          p.hasWorldPos = false;
+          p.distance = -1.f;
           uint16_t role = *(uint16_t *)((uintptr_t)data + 0x38);
-          p.isImpostor = (role == 1 || role == 5 || role == 7 || role == 9);
+          bool hasRoleWhenAlive = *(bool *)((uintptr_t)data + 0x3C);
+          if (hasRoleWhenAlive) {
+            uint16_t roleWhenAlive = *(uint16_t *)((uintptr_t)data + 0x3A);
+            if (role == 0 || role == 6)
+              role = roleWhenAlive;
+          }
+          p.isImpostor = (role == 1 || role == 5 || role == 7 || role == 9 || role == 18);
+
+          // Pull stronger role/impostor hints from RoleBehaviour when
+          // available.
+          void *roleObj = *(void **)((uintptr_t)data + 0x4C);
+          if (IsValid(roleObj)) {
+            uint16_t rbRole =
+                *(uint16_t *)((uintptr_t)roleObj + 0x10); // RoleBehaviour.Role
+            if (rbRole != 0 || role == 0 || role == 6)
+              role = rbRole;
+
+            int teamType =
+                *(int *)((uintptr_t)roleObj + 0x4C); // RoleBehaviour.TeamType
+            if (teamType == 1)
+              p.isImpostor = true;
+
+            if (rb_getIsImpostor_method) {
+              bool rbImp = false;
+              void *boxed = il2cpp_runtime_invoke(rb_getIsImpostor_method,
+                                                  roleObj, nullptr, nullptr);
+              if (TryReadBoxedBool(boxed, rbImp) && rbImp)
+                p.isImpostor = true;
+            }
+          }
           p.roleName = GetRoleName(role);
+          if (isInMeeting && p.isImpostor)
+            p.roleName = "Impostor";
 
           if (get_playerName_method) {
             void *nameStr = il2cpp_runtime_invoke(get_playerName_method, data,
                                                   nullptr, nullptr);
             p.name = ReadIl2CppString(nameStr);
           } else {
-            p.name = "Player " +
-                     std::to_string(*(uint8_t *)((uintptr_t)pcObj + 0x28));
+            p.name = "Player " + std::to_string(p.playerId);
           }
 
-          void *pcNt = *(void **)((uintptr_t)pcObj + 0x98);
-          if (IsValid(pcNt)) {
-            p.x = *(float *)((uintptr_t)pcNt + 0x44);
-            p.y = *(float *)((uintptr_t)pcNt + 0x48);
+          p.hasWorldPos = TryGetPlayerWorldPos(pcObj, p.x, p.y);
+          if (!p.hasWorldPos) {
+            p.x = localX;
+            p.y = localY;
           }
 
           if (pcObj == lp) {
             isImpostor = p.isImpostor;
+            localRole = role;
+            localRoleName = p.roleName;
+            // Read level from NetworkedPlayerInfo (offset 0x44)
+            // Game stores level as (displayLevel - 1), so add 1 for display
+            if (IsValid(data)) {
+              localLevel = (int)*(uint32_t *)((uintptr_t)data + 0x44) + 1;
+              localColorId = (int)*(uint8_t *)((uintptr_t)data + 0x34);
+            }
           } else {
-            p.distance = sqrtf(powf(p.x - localX, 2) + powf(p.y - localY, 2));
+            if (p.hasWorldPos)
+              p.distance = sqrtf(powf(p.x - localX, 2) + powf(p.y - localY, 2));
             temp.push_back(p);
           }
         }
         players = temp;
+
+        if (!g_freezeAll && g_freezeWasActive) {
+          for (int i = 0; i < list->size; i++) {
+            void *pcObj = arr->m_Items[i];
+            if (!IsValid(pcObj) || pcObj == lp)
+              continue;
+            int pid = (int)*(uint8_t *)((uintptr_t)pcObj + 0x28);
+            auto it = g_frozenPlayerSpeeds.find(pid);
+            if (it == g_frozenPlayerSpeeds.end())
+              continue;
+            void *phys2 = *(void **)((uintptr_t)pcObj + 0x94);
+            if (IsValid(phys2))
+              *(float *)((uintptr_t)phys2 + 0x34) = it->second;
+          }
+          g_frozenPlayerSpeeds.clear();
+        }
+        g_freezeWasActive = g_freezeAll;
       }
     }
   }
 
   if (g_chatSpam) {
     static float lastSpam = 0;
+    static int spamSeq = 1;
     if (currentTime - lastSpam > 2.0f) { // 2s interval to avoid spam detection
       lastSpam = currentTime;
-      SpamChat(g_chatBuf[0] ? g_chatBuf : "Stara Client");
+      const char *base = g_chatBuf[0] ? g_chatBuf : "Stara Client";
+      char msg[196];
+      snprintf(msg, sizeof(msg), "%s [%d]", base, spamSeq++);
+      SpamChat(msg);
     }
   }
 }
@@ -517,26 +982,30 @@ void Update() {
 
 void SetSpeed(float speed) {
   Attach();
+  g_speed = speed;
+  g_walkSpeed = speed;
   void *lp = GetLocalPlayer();
   if (!lp)
     return;
   void *phys = *(void **)((uintptr_t)lp + 0x94);
   if (IsValid(phys)) {
     *(float *)((uintptr_t)phys + 0x34) = speed;
-    *(float *)((uintptr_t)phys + 0x38) = speed;
   }
 }
 
 void SetFullbright(bool enabled) {
   Attach();
   if (ShipStatus::klass) {
-    void *field = il2cpp_class_get_field_from_name(ShipStatus::klass, "Instance");
+    void *field =
+        il2cpp_class_get_field_from_name(ShipStatus::klass, "Instance");
     void *inst = nullptr;
     if (field)
       il2cpp_field_static_get_value(field, &inst);
     if (IsValid(inst)) {
-      *(float *)((uintptr_t)inst + 0x38) = enabled ? 100.f : 1.f; // MaxLightRadius
-      *(float *)((uintptr_t)inst + 0x3C) = enabled ? 100.f : 1.f; // MinLightRadius
+      *(float *)((uintptr_t)inst + 0x38) =
+          enabled ? 100.f : 1.f; // MaxLightRadius
+      *(float *)((uintptr_t)inst + 0x3C) =
+          enabled ? 100.f : 1.f; // MinLightRadius
     }
   }
 
@@ -548,10 +1017,13 @@ void SetFullbright(bool enabled) {
     if (field)
       il2cpp_field_static_get_value(field, &inst);
     if (IsValid(inst)) {
-      void *opt = *(void **)((uintptr_t)inst + 0x18); // currentNormalGameOptions
+      void *opt =
+          *(void **)((uintptr_t)inst + 0x18); // currentNormalGameOptions
       if (IsValid(opt)) {
-        *(float *)((uintptr_t)opt + 0x1C) = enabled ? 5.0f : 1.0f; // CrewLightMod
-        *(float *)((uintptr_t)opt + 0x20) = enabled ? 5.0f : 1.0f; // ImpostorLightMod
+        *(float *)((uintptr_t)opt + 0x1C) =
+            enabled ? 5.0f : 1.0f; // CrewLightMod
+        *(float *)((uintptr_t)opt + 0x20) =
+            enabled ? 5.0f : 1.0f; // ImpostorLightMod
       }
     }
   }
@@ -559,22 +1031,40 @@ void SetFullbright(bool enabled) {
 
 // Direct RVA function typedefs for IL2CPP compiled methods (x86 cdecl)
 
-
 void CompleteAllTasks() {
   Attach();
   void *lp = GetLocalPlayer();
   if (!lp || !gameAssembly)
     return;
 
-  auto RpcCompleteTask = (RpcCompleteTask_fn)(gameAssembly + 0x5C8C20);
+  EnsurePlayerControlMethods();
+  auto rpcCompleteTask =
+      (RpcCompleteTask_fn)(gameAssembly + g_rvaRpcCompleteTask);
 
   // Try two known offsets for myTasks pointer
   void *tasks = nullptr;
   for (uintptr_t off : {0xACu, 0xA8u, 0xB0u}) {
     void *t = *(void **)((uintptr_t)lp + off);
-    if (IsValid(t)) { tasks = t; break; }
+    if (IsValid(t)) {
+      tasks = t;
+      break;
+    }
   }
-  if (!IsValid(tasks)) return;
+  bool completedAny = false;
+  if (!IsValid(tasks)) {
+    // Fallback: brute task ids when myTasks pointer layout changes.
+    for (uint32_t taskId = 0; taskId < 64; taskId++) {
+      __try {
+        if (pc_completeTask_method) {
+          void *p[1] = {&taskId};
+          il2cpp_runtime_invoke(pc_completeTask_method, lp, p, nullptr);
+        }
+        rpcCompleteTask(lp, taskId, nullptr);
+      } __except (EXCEPTION_EXECUTE_HANDLER) {
+      }
+    }
+    return;
+  }
 
   struct Il2CppList {
     void *klass;
@@ -597,14 +1087,31 @@ void CompleteAllTasks() {
     Il2CppArray *arr = (Il2CppArray *)list->items;
     for (int i = 0; i < list->size && i < arr->max_length; i++) {
       void *task = arr->m_Items[i];
-      if (!IsValid(task)) continue;
-      // Mark task complete locally first (IsComplete flag at 0x28)
-      *(bool *)((uintptr_t)task + 0x28) = true;
-      // Send RPC to sync
-      uint32_t idx = *(uint32_t *)((uintptr_t)task + 0x10);
-      RpcCompleteTask(lp, idx, nullptr);
+      if (!IsValid(task))
+        continue;
+      uint32_t taskId = *(uint32_t *)((uintptr_t)task + 0x14);
+      if (pc_completeTask_method) {
+        void *p[1] = {&taskId};
+        il2cpp_runtime_invoke(pc_completeTask_method, lp, p, nullptr);
+      }
+      rpcCompleteTask(lp, taskId, nullptr);
+      completedAny = true;
     }
-  } __except (EXCEPTION_EXECUTE_HANDLER) {}
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
+
+  if (!completedAny) {
+    for (uint32_t taskId = 0; taskId < 64; taskId++) {
+      __try {
+        if (pc_completeTask_method) {
+          void *p[1] = {&taskId};
+          il2cpp_runtime_invoke(pc_completeTask_method, lp, p, nullptr);
+        }
+        rpcCompleteTask(lp, taskId, nullptr);
+      } __except (EXCEPTION_EXECUTE_HANDLER) {
+      }
+    }
+  }
 }
 
 void ForceEmergencyMeeting() {
@@ -613,13 +1120,12 @@ void ForceEmergencyMeeting() {
   if (!IsValid(lp) || !gameAssembly)
     return;
 
-  // Direct RVA call — RpcStartMeeting RVA: 0x5C9F90
-  auto RpcStartMeeting =
-      (RpcStartMeeting_fn)(gameAssembly + 0x5C9F90);
-
   __try {
-    // Pass nullptr = emergency meeting (no body found)
-    RpcStartMeeting(lp, nullptr, nullptr);
+    // Use CmdReportDeadBody(null) — works for both host and non-host.
+    // RpcStartMeeting only works reliably as host and can trigger anti-cheat.
+    auto CmdReportDeadBody =
+        (CmdReportDeadBody_fn)(gameAssembly + g_rvaCmdReportDeadBody);
+    CmdReportDeadBody(lp, nullptr, nullptr);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
     printf("[!] Stara: ForceEmergencyMeeting caught exception\n");
   }
@@ -630,164 +1136,269 @@ void ForceEmergencyMeeting() {
 void SetPlayerColor(int colorId) {
   Attach();
   void *lp = GetLocalPlayer();
-  if (!IsValid(lp) || !gameAssembly) return;
+  if (!IsValid(lp) || !gameAssembly)
+    return;
   __try {
-    auto fn = (RpcSetColor_fn)(gameAssembly + 0x5C9430);
+    auto fn = (RpcSetColor_fn)(gameAssembly + g_rvaRpcSetColor);
     fn(lp, (uint8_t)colorId, nullptr);
-  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
 }
 
 void TeleportTo(float x, float y) {
   Attach();
   void *lp = GetLocalPlayer();
-  if (!IsValid(lp) || !gameAssembly) return;
+  if (!IsValid(lp) || !gameAssembly)
+    return;
   void *nt = *(void **)((uintptr_t)lp + 0x98);
-  if (!IsValid(nt)) return;
+  if (!IsValid(nt))
+    return;
   __try {
     // RpcSnapTo syncs position to all clients (RVA 0x535E60)
-    auto fn = (RpcSnapTo_fn)(gameAssembly + 0x535E60);
+    auto fn = (RpcSnapTo_fn)(gameAssembly + g_rvaRpcSnapTo);
     fn(nt, x, y, nullptr);
-  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
 }
 
 void SetName(const char *name) {
   Attach();
   void *lp = GetLocalPlayer();
-  if (!IsValid(lp) || !gameAssembly || !il2cpp_string_new) return;
+  if (!IsValid(lp) || !gameAssembly || !il2cpp_string_new || !name)
+    return;
   __try {
-    // Write name directly to CachedPlayerData.PlayerName (string at offset 0x10)
-    void *data = *(void **)((uintptr_t)lp + 0x58);
-    if (IsValid(data)) {
-      void *nameStr = il2cpp_string_new(name);
-      *(void **)((uintptr_t)data + 0x10) = nameStr;
+    void *nameStr = il2cpp_string_new(name);
+    EnsurePlayerControlMethods();
+    auto rpcSetName = (RpcSetName_fn)(gameAssembly + g_rvaRpcSetName);
+    if (pc_setName_method) {
+      void *p[1] = {nameStr};
+      il2cpp_runtime_invoke(pc_setName_method, lp, p, nullptr);
     }
-    // Also RPC broadcast (RpcSetName RVA: 0x5C9790)
-    auto fn = (RpcSetName_fn)(gameAssembly + 0x5C9790);
-    fn(lp, il2cpp_string_new(name), nullptr);
-  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+    rpcSetName(lp, nameStr, nullptr);
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
 }
 
 void SetKillCooldown(float time) {
+  Attach();
   void *lp = GetLocalPlayer();
-  if (IsValid(lp))
-    *(float *)((uintptr_t)lp + 0x80) = time;
-  if (!GameOptionsManager::klass) return;
-  void *field = il2cpp_class_get_field_from_name(GameOptionsManager::klass, "<Instance>k__BackingField");
+  if (IsValid(lp)) {
+    EnsurePlayerControlMethods();
+    if (pc_setKillTimer_method) {
+      void *p[1] = {&time};
+      il2cpp_runtime_invoke(pc_setKillTimer_method, lp, p, nullptr);
+    } else {
+      *(float *)((uintptr_t)lp + 0x80) = time;
+    }
+  }
+  if (!GameOptionsManager::klass)
+    return;
+  void *field = il2cpp_class_get_field_from_name(GameOptionsManager::klass,
+                                                 "<Instance>k__BackingField");
   void *inst = nullptr;
-  if (field) il2cpp_field_static_get_value(field, &inst);
+  if (field)
+    il2cpp_field_static_get_value(field, &inst);
   if (IsValid(inst)) {
     void *opt = *(void **)((uintptr_t)inst + 0x18);
-    if (IsValid(opt)) *(float *)((uintptr_t)opt + 0x24) = time;
+    if (IsValid(opt))
+      *(float *)((uintptr_t)opt + 0x24) = time;
   }
 }
 
 void SetKillDistance(float dist) {
-  if (!GameOptionsManager::klass) return;
-  void *field = il2cpp_class_get_field_from_name(GameOptionsManager::klass, "<Instance>k__BackingField");
+  if (!GameOptionsManager::klass)
+    return;
+  int killDistance = 1; // 0=Short, 1=Medium, 2=Long
+  if (dist <= 2.0f)
+    killDistance = 0;
+  else if (dist >= 4.0f)
+    killDistance = 2;
+  else
+    killDistance = 1;
+
+  void *field = il2cpp_class_get_field_from_name(GameOptionsManager::klass,
+                                                 "<Instance>k__BackingField");
   void *inst = nullptr;
-  if (field) il2cpp_field_static_get_value(field, &inst);
+  if (field)
+    il2cpp_field_static_get_value(field, &inst);
   if (IsValid(inst)) {
     void *opt = *(void **)((uintptr_t)inst + 0x18);
-    if (IsValid(opt)) *(int *)((uintptr_t)opt + 0x44) = (int)dist;
+    if (IsValid(opt))
+      *(int *)((uintptr_t)opt + 0x44) = killDistance;
   }
 }
 
-void SetWallhack(bool enabled) { SetFullbright(enabled); }
+void SetWallhack(bool enabled) {
+  // Wallhack gives impostor-level vision (wider sight in dark areas) rather
+  // than the extreme fullbright (which removes all shadows). This makes
+  // wallhack more subtle and less detectable than fullbright.
+  if (!GameOptionsManager::klass)
+    return;
+  void *field = il2cpp_class_get_field_from_name(GameOptionsManager::klass,
+                                                 "<Instance>k__BackingField");
+  void *inst = nullptr;
+  if (field)
+    il2cpp_field_static_get_value(field, &inst);
+  if (IsValid(inst)) {
+    void *opt = *(void **)((uintptr_t)inst + 0x18);
+    if (IsValid(opt)) {
+      *(float *)((uintptr_t)opt + 0x1C) =
+          enabled ? 1.5f : 1.0f; // CrewLightMod (impostor-like)
+      *(float *)((uintptr_t)opt + 0x20) =
+          enabled ? 1.5f : 1.0f; // ImpostorLightMod
+    }
+  }
+}
 
 void SetHat(int hatId) {
   Attach();
   void *lp = GetLocalPlayer();
-  if (!IsValid(lp) || !gameAssembly || !il2cpp_string_new) return;
-  const char* hatIds[] = {"hat_NoHat","hat_crown","hat_tophat","hat_beanie","hat_horns"};
-  if (hatId < 0 || hatId > 4) return;
+  if (!IsValid(lp) || !gameAssembly || !il2cpp_string_new)
+    return;
+  const char *hatIds[] = {"hat_NoHat", "hat_crown", "hat_tophat", "hat_beanie",
+                          "hat_horns"};
+  if (hatId < 0 || hatId > 4)
+    return;
   __try {
-    auto fn = (RpcSetHat_fn)(gameAssembly + 0x5C94F0);
+    auto fn = (RpcSetHat_fn)(gameAssembly + g_rvaRpcSetHat);
     fn(lp, il2cpp_string_new(hatIds[hatId]), nullptr);
-  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
 }
 
 void SetPet(int petId) {
   Attach();
   void *lp = GetLocalPlayer();
-  if (!IsValid(lp) || !gameAssembly || !il2cpp_string_new) return;
-  const char* petIds[] = {"pet_EmptyPet","pet_Crewmate","pet_Dog","pet_Cat","pet_Robot"};
-  if (petId < 0 || petId > 4) return;
+  if (!IsValid(lp) || !gameAssembly || !il2cpp_string_new)
+    return;
+  const char *petIds[] = {"pet_EmptyPet", "pet_Crewmate", "pet_Dog", "pet_Cat",
+                          "pet_Robot"};
+  if (petId < 0 || petId > 4)
+    return;
   __try {
-    auto fn = (RpcSetPet_fn)(gameAssembly + 0x5C9850);
+    auto fn = (RpcSetPet_fn)(gameAssembly + g_rvaRpcSetPet);
     fn(lp, il2cpp_string_new(petIds[petId]), nullptr);
-  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
 }
 
 void SetSkin(int skinId) {
   Attach();
   void *lp = GetLocalPlayer();
-  if (!IsValid(lp) || !gameAssembly || !il2cpp_string_new) return;
-  const char* skinIds[] = {"skin_None","skin_Suit","skin_Astronaut","skin_Military","skin_Mech"};
-  if (skinId < 0 || skinId > 4) return;
+  if (!IsValid(lp) || !gameAssembly || !il2cpp_string_new)
+    return;
+  const char *skinIds[] = {"skin_None", "skin_Suit", "skin_Astronaut",
+                           "skin_Military", "skin_Mech"};
+  if (skinId < 0 || skinId > 4)
+    return;
   __try {
-    auto fn = (RpcSetSkin_fn)(gameAssembly + 0x5C9BC0);
+    auto fn = (RpcSetSkin_fn)(gameAssembly + g_rvaRpcSetSkin);
     fn(lp, il2cpp_string_new(skinIds[skinId]), nullptr);
-  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
 }
 
 void SetCharacterScale(float scale) {
   Attach();
   void *lp = GetLocalPlayer();
-  if (!IsValid(lp)) return;
-  // Write scale directly to the defaultCosmeticsScale field
-  *(float *)((uintptr_t)lp + 0xA0) = scale;       // x
-  *(float *)((uintptr_t)lp + 0xA4) = scale;       // y
-  *(float *)((uintptr_t)lp + 0xA8) = 1.0f;        // z
+  if (!IsValid(lp))
+    return;
+
+  // Get the player's Transform via Component.get_transform, then set localScale.
+  // Writing to arbitrary PlayerControl offsets (0xA0-0xA8) doesn't set scale.
+  static void *get_transform_method = nullptr;
+  static void *set_localScale_method = nullptr;
+  if (!get_transform_method) {
+    // Component.get_transform is inherited by PlayerControl
+    void *klass = *(void **)lp; // klass pointer
+    if (IsValid(klass))
+      get_transform_method =
+          il2cpp_class_get_method_from_name(klass, "get_transform", 0);
+  }
+  if (!get_transform_method)
+    return;
+
+  __try {
+    void *transform =
+        il2cpp_runtime_invoke(get_transform_method, lp, nullptr, nullptr);
+    if (!IsValid(transform))
+      return;
+
+    if (!set_localScale_method && Transform::klass)
+      set_localScale_method = il2cpp_class_get_method_from_name(
+          Transform::klass, "set_localScale", 1);
+    if (!set_localScale_method)
+      return;
+
+    // Vector3 struct passed by pointer for il2cpp_runtime_invoke
+    struct Vec3 {
+      float x, y, z;
+    };
+    Vec3 newScale = {scale, scale, 1.0f};
+    void *p[1] = {&newScale};
+    il2cpp_runtime_invoke(set_localScale_method, transform, p, nullptr);
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
 }
 
 void PlayAnimation(uint8_t animId) {
   Attach();
   void *lp = GetLocalPlayer();
-  if (!IsValid(lp) || !gameAssembly) return;
+  if (!IsValid(lp) || !gameAssembly)
+    return;
   __try {
-    auto fn = (RpcPlayAnimation_fn)(gameAssembly + 0x5C8D80);
+    auto fn = (RpcPlayAnimation_fn)(gameAssembly + g_rvaRpcPlayAnimation);
     fn(lp, animId, nullptr);
-  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
 }
 
 // Camera state for ESP (updated in UpdateInternal)
 static float camX = 0, camY = 0, orthoSize = 3.0f;
 
 static void UpdateCameraState() {
-  if (!gameAssembly) return;
-  // Camera.get_main() — RVA: 0x1F18980 (static, no __this)
-  typedef void* (__cdecl *GetMainCamera_fn)(void*);
-  auto getMain = (GetMainCamera_fn)(gameAssembly + 0x1F18980);
+  if (!gameAssembly)
+    return;
+  // Camera.get_main() — resolved from dump.cs when available.
+  typedef void *(__cdecl * GetMainCamera_fn)(void *);
+  auto getMain = (GetMainCamera_fn)(gameAssembly + g_rvaCameraGetMain);
   void *cam = getMain(nullptr);
-  if (!IsValid(cam)) return;
-  
-  // Camera.get_orthographicSize() — RVA: 0x1F18A70
-  typedef float (__cdecl *GetOrthoSize_fn)(void*, void*);
-  auto getOrtho = (GetOrthoSize_fn)(gameAssembly + 0x1F18A70);
+  if (!IsValid(cam))
+    return;
+
+  // Camera.get_orthographicSize() — resolved from dump.cs when available.
+  typedef float(__cdecl * GetOrthoSize_fn)(void *, void *);
+  auto getOrtho = (GetOrthoSize_fn)(gameAssembly + g_rvaCameraGetOrthoSize);
   float os = getOrtho(cam, nullptr);
-  if (os > 0.1f && os < 100.f) orthoSize = os;
-  
+  if (os > 0.1f && os < 100.f)
+    orthoSize = os;
+
   // Get camera transform via il2cpp_runtime_invoke
   if (Transform::klass) {
     static void *get_transform_method = nullptr;
     if (!get_transform_method) {
       // Component.get_transform is inherited — resolve from Camera's klass
-      void *camKlass = *(void**)cam; // first field is klass pointer
+      void *camKlass = *(void **)cam; // first field is klass pointer
       if (IsValid(camKlass))
-        get_transform_method = il2cpp_class_get_method_from_name(camKlass, "get_transform", 0);
+        get_transform_method =
+            il2cpp_class_get_method_from_name(camKlass, "get_transform", 0);
     }
     if (get_transform_method) {
-      void *camTransform = il2cpp_runtime_invoke(get_transform_method, cam, nullptr, nullptr);
+      void *camTransform =
+          il2cpp_runtime_invoke(get_transform_method, cam, nullptr, nullptr);
       if (IsValid(camTransform)) {
         static void *get_position_method = nullptr;
         if (!get_position_method)
-          get_position_method = il2cpp_class_get_method_from_name(Transform::klass, "get_position", 0);
+          get_position_method = il2cpp_class_get_method_from_name(
+              Transform::klass, "get_position", 0);
         if (get_position_method) {
           // get_position returns a boxed Vector3 — we need the unboxed values
-          void *posBox = il2cpp_runtime_invoke(get_position_method, camTransform, nullptr, nullptr);
+          void *posBox = il2cpp_runtime_invoke(get_position_method,
+                                               camTransform, nullptr, nullptr);
           if (IsValid(posBox)) {
-            // Boxed value type: klass, monitor, then the value data (3 floats for Vector3)
-            float *xyz = (float*)((uintptr_t)posBox + 0x08); // skip klass+monitor (2 pointers = 8 bytes on x86)
+            // Boxed value type: klass, monitor, then the value data (Vector3).
+            // Skip two pointer-sized fields so this works on both x86 and x64.
+            float *xyz = (float *)((uintptr_t)posBox + sizeof(void *) * 2);
             camX = xyz[0];
             camY = xyz[1];
           }
@@ -803,58 +1414,94 @@ static ImVec2 WorldToScreen(float wx, float wy) {
   float screenH = ImGui::GetIO().DisplaySize.y;
   float ppu = screenH / (2.f * orthoSize); // pixels per world unit
   float sx = (wx - camX) * ppu + screenW / 2.f;
-  float sy = screenH / 2.f - (wy - camY) * ppu; // Y is flipped (screen Y goes down)
+  float sy =
+      screenH / 2.f - (wy - camY) * ppu; // Y is flipped (screen Y goes down)
   return {sx, sy};
 }
 
 void DrawESP(ImDrawList *drawList) {
-  if (!isInGame || players.empty()) return;
-  
+  if (!isInGame || players.empty())
+    return;
+
   float screenW = ImGui::GetIO().DisplaySize.x;
   float screenH = ImGui::GetIO().DisplaySize.y;
   float ppu = screenH / (2.f * orthoSize);
   // Box size scaled to camera zoom
-  float boxW = 0.5f * ppu;  // ~0.5 world units wide
-  float boxH = 0.8f * ppu;  // ~0.8 world units tall
-  
+  float boxW = 0.5f * ppu; // ~0.5 world units wide
+  float boxH = 0.8f * ppu; // ~0.8 world units tall
+
   for (const auto &p : players) {
+    if (!p.hasWorldPos)
+      continue;
     ImVec2 sp = WorldToScreen(p.x, p.y);
     // Cull offscreen
-    if (sp.x < -200 || sp.x > screenW+200 ||
-        sp.y < -200 || sp.y > screenH+200) continue;
-        
-    ImU32 col = p.isImpostor ? IM_COL32(255,30,30,255) : IM_COL32(0,220,255,255);
-    if (p.isDead) col = IM_COL32(150,150,150,200);
-    
+    if (sp.x < -200 || sp.x > screenW + 200 || sp.y < -200 ||
+        sp.y > screenH + 200)
+      continue;
+
+    ImU32 col =
+        p.isImpostor ? IM_COL32(255, 30, 30, 255) : IM_COL32(0, 220, 255, 255);
+    if (p.isDead)
+      col = IM_COL32(150, 150, 150, 200);
+
     if (g_espBox) {
       // Shadow
-      drawList->AddRect({sp.x-boxW-1, sp.y-boxH-1}, {sp.x+boxW+1, sp.y+boxH*0.1f+1}, IM_COL32(0,0,0,150), 3.f, 0, 1.5f);
+      drawList->AddRect({sp.x - boxW - 1, sp.y - boxH - 1},
+                        {sp.x + boxW + 1, sp.y + boxH * 0.1f + 1},
+                        IM_COL32(0, 0, 0, 150), 3.f, 0, 1.5f);
       // Main box
-      drawList->AddRect({sp.x-boxW, sp.y-boxH}, {sp.x+boxW, sp.y+boxH*0.1f}, col, 3.f, 0, 2.0f);
+      drawList->AddRect({sp.x - boxW, sp.y - boxH},
+                        {sp.x + boxW, sp.y + boxH * 0.1f}, col, 3.f, 0, 2.0f);
     }
-    
+
     float textY = sp.y - boxH - 16;
     if (g_espName) {
       std::string dn = p.name;
-      if (p.isDead) dn += " [DEAD]";
+      if (p.isDead)
+        dn += " [DEAD]";
       ImVec2 sz = ImGui::CalcTextSize(dn.c_str());
-      drawList->AddText({sp.x-sz.x/2+1, textY+1}, IM_COL32(0,0,0,180), dn.c_str());
-      drawList->AddText({sp.x-sz.x/2, textY}, col, dn.c_str());
+      drawList->AddText({sp.x - sz.x / 2 + 1, textY + 1},
+                        IM_COL32(0, 0, 0, 180), dn.c_str());
+      drawList->AddText({sp.x - sz.x / 2, textY}, col, dn.c_str());
       textY -= 14;
     }
-    if (g_espDist) {
-      char dbuf[16]; snprintf(dbuf, sizeof(dbuf), "%.1fm", p.distance);
+    if (g_espDist && p.distance >= 0.f) {
+      char dbuf[16];
+      snprintf(dbuf, sizeof(dbuf), "%.1fm", p.distance);
       ImVec2 sz = ImGui::CalcTextSize(dbuf);
-      drawList->AddText({sp.x-sz.x/2, sp.y+boxH*0.1f+4}, IM_COL32(200,200,200,200), dbuf);
+      drawList->AddText({sp.x - sz.x / 2, sp.y + boxH * 0.1f + 4},
+                        IM_COL32(200, 200, 200, 200), dbuf);
     }
     if (g_espRole) {
       ImVec2 sz = ImGui::CalcTextSize(p.roleName.c_str());
-      ImU32 rc = p.isImpostor ? IM_COL32(255,80,80,255) : IM_COL32(100,255,100,255);
-      drawList->AddText({sp.x-sz.x/2, sp.y+boxH*0.1f+18}, rc, p.roleName.c_str());
+      ImU32 rc = p.isImpostor ? IM_COL32(255, 80, 80, 255)
+                              : IM_COL32(100, 255, 100, 255);
+      drawList->AddText({sp.x - sz.x / 2, sp.y + boxH * 0.1f + 18}, rc,
+                        p.roleName.c_str());
+    }
+    if (g_espTask) {
+      const char *taskTag = p.isDead ? "X" : "T";
+      ImU32 tc =
+          p.isDead ? IM_COL32(140, 140, 140, 220) : IM_COL32(255, 220, 90, 230);
+      drawList->AddCircleFilled({sp.x + boxW + 9.f, sp.y - boxH + 7.f}, 6.f, tc,
+                                14);
+      ImVec2 ts = ImGui::CalcTextSize(taskTag);
+      drawList->AddText({sp.x + boxW + 9.f - ts.x * 0.5f, sp.y - boxH + 2.f},
+                        IM_COL32(15, 15, 15, 230), taskTag);
+    }
+    if (g_particle) {
+      float t = (float)ImGui::GetTime();
+      for (int k = 0; k < 5; k++) {
+        float a = t * 2.2f + k * (6.283185f / 5.f);
+        float r = 9.f + 3.f * sinf(t * 3.7f + k);
+        ImVec2 pp = {sp.x + cosf(a) * r, sp.y - boxH * 0.45f + sinf(a) * r};
+        drawList->AddCircleFilled(pp, 1.6f, IM_COL32(135, 235, 255, 170), 8);
+      }
     }
     if (g_espTracer) {
-      ImVec2 bot = {screenW/2.f, screenH};
-      drawList->AddLine(bot, {sp.x, sp.y}, (col & 0x00FFFFFF)|0x80000000, 1.2f);
+      ImVec2 bot = {screenW / 2.f, screenH};
+      drawList->AddLine(bot, {sp.x, sp.y}, (col & 0x00FFFFFF) | 0x80000000,
+                        1.2f);
     }
   }
 }
@@ -862,56 +1509,71 @@ void DrawESP(ImDrawList *drawList) {
 void SpamChat(const char *text) {
   Attach();
   void *lp = GetLocalPlayer();
-  if (!IsValid(lp) || !gameAssembly || !il2cpp_string_new) return;
+  if (!IsValid(lp) || !gameAssembly || !il2cpp_string_new || !text || !text[0])
+    return;
   __try {
-    auto fn = (RpcSendChat_fn)(gameAssembly + 0x5C90C0);
+    auto fn = (RpcSendChat_fn)(gameAssembly + g_rvaRpcSendChat);
     void *str = il2cpp_string_new(text);
     fn(lp, str, nullptr); // returns bool but we ignore it
-  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
 }
 
 void EndGame() {
   Attach();
-  if (!gameAssembly || !AmongUsClient::klass) return;
-  void *field = il2cpp_class_get_field_from_name(AmongUsClient::klass, "Instance");
+  if (!gameAssembly || !AmongUsClient::klass)
+    return;
+  void *field =
+      il2cpp_class_get_field_from_name(AmongUsClient::klass, "Instance");
   void *inst = nullptr;
-  if (field) il2cpp_field_static_get_value(field, &inst);
-  if (!IsValid(inst)) return;
+  if (field)
+    il2cpp_field_static_get_value(field, &inst);
+  if (!IsValid(inst))
+    return;
   __try {
     // AmongUsClient.StartGame RVA: 0x5487F0 — triggers end sequence
     // Actually use ExitGame: RVA 0x546850
-    typedef void (__cdecl *ExitGame_fn)(void*, int, void*);
-    auto fn = (ExitGame_fn)(gameAssembly + 0x546850);
+    typedef void(__cdecl * ExitGame_fn)(void *, int, void *);
+    auto fn = (ExitGame_fn)(gameAssembly + g_rvaAmongUsClientExitGame);
     fn(inst, 0, nullptr); // reason = 0
-  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
 }
 
 void StartGame() {
   Attach();
-  if (!gameAssembly || !AmongUsClient::klass) return;
-  void *field = il2cpp_class_get_field_from_name(AmongUsClient::klass, "Instance");
+  if (!gameAssembly || !AmongUsClient::klass)
+    return;
+  // MalumMenu: requires isHost && isLobby to force-start
+  if (!IsHost())
+    return;
+  void *field =
+      il2cpp_class_get_field_from_name(AmongUsClient::klass, "Instance");
   void *inst = nullptr;
-  if (field) il2cpp_field_static_get_value(field, &inst);
-  if (!IsValid(inst)) return;
+  if (field)
+    il2cpp_field_static_get_value(field, &inst);
+  if (!IsValid(inst))
+    return;
   __try {
-    // AmongUsClient.StartGame() RVA: 0x5487F0
-    auto fn = (StartGame_fn)(gameAssembly + 0x5487F0);
+    // MalumMenu uses SendStartGame() not StartGame()
+    auto fn = (StartGame_fn)(gameAssembly + g_rvaAmongUsClientSendStartGame);
     fn(inst, nullptr);
-  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
 }
 
 void TeleportToRoom(int roomId) {
   // Skeld room coords
   const float coords[][2] = {
-    {-1.f, -1.f},     // 0: Cafeteria
-    {-17.f, -5.f},    // 1: Reactor
-    {6.5f, -3.5f},    // 2: Navigation
-    {-8.8f, -3.f},    // 3: Medbay
-    {-2.f, -16.f},    // 4: Electrical
-    {3.5f, -12.f},    // 5: Storage
-    {9.4f, 2.8f},     // 6: Weapons
-    {-20.5f, -5.5f},  // 7: Upper Engine
-    {-20.5f, -12.f},  // 8: Lower Engine
+      {-1.f, -1.f},    // 0: Cafeteria
+      {-17.f, -5.f},   // 1: Reactor
+      {6.5f, -3.5f},   // 2: Navigation
+      {-8.8f, -3.f},   // 3: Medbay
+      {-2.f, -16.f},   // 4: Electrical
+      {3.5f, -12.f},   // 5: Storage
+      {9.4f, 2.8f},    // 6: Weapons
+      {-20.5f, -5.5f}, // 7: Upper Engine
+      {-20.5f, -12.f}, // 8: Lower Engine
   };
   if (roomId >= 0 && roomId < 9)
     TeleportTo(coords[roomId][0], coords[roomId][1]);
@@ -919,38 +1581,128 @@ void TeleportToRoom(int roomId) {
 
 // ── Helper: get a PlayerControl* by index from AllPlayerControls ──
 static void *GetPlayerByIndex(int idx) {
-  if (!PlayerControl::klass) return nullptr;
-  void *field = il2cpp_class_get_field_from_name(PlayerControl::klass, "AllPlayerControls");
+  if (!PlayerControl::klass)
+    return nullptr;
+  void *field = il2cpp_class_get_field_from_name(PlayerControl::klass,
+                                                 "AllPlayerControls");
   void *list = nullptr;
-  if (field) il2cpp_field_static_get_value(field, &list);
-  if (!IsValid(list)) return nullptr;
-  struct L { void *k; void *m; void *items; int size; };
-  struct A { void *k; void *m; void *b; int len; void *m_Items[1]; };
+  if (field)
+    il2cpp_field_static_get_value(field, &list);
+  if (!IsValid(list))
+    return nullptr;
+  struct L {
+    void *k;
+    void *m;
+    void *items;
+    int size;
+  };
+  struct A {
+    void *k;
+    void *m;
+    void *b;
+    int len;
+    void *m_Items[1];
+  };
   L *l = (L *)list;
-  if (!IsValid(l->items) || idx < 0 || idx >= l->size) return nullptr;
+  if (!IsValid(l->items) || idx < 0 || idx >= l->size)
+    return nullptr;
   A *a = (A *)l->items;
   return (idx < a->len && IsValid(a->m_Items[idx])) ? a->m_Items[idx] : nullptr;
 }
 
+static void *GetPlayerByPlayerId(int playerId) {
+  if (!PlayerControl::klass || playerId < 0 || playerId > 255)
+    return nullptr;
+  void *field = il2cpp_class_get_field_from_name(PlayerControl::klass,
+                                                 "AllPlayerControls");
+  void *list = nullptr;
+  if (field)
+    il2cpp_field_static_get_value(field, &list);
+  if (!IsValid(list))
+    return nullptr;
+  struct L {
+    void *k;
+    void *m;
+    void *items;
+    int size;
+  };
+  struct A {
+    void *k;
+    void *m;
+    void *b;
+    int len;
+    void *m_Items[1];
+  };
+  L *l = (L *)list;
+  if (!IsValid(l->items) || l->size <= 0)
+    return nullptr;
+  A *a = (A *)l->items;
+  int maxN = (l->size < a->len) ? l->size : a->len;
+  for (int i = 0; i < maxN; i++) {
+    void *p = a->m_Items[i];
+    if (!IsValid(p))
+      continue;
+    if (*(uint8_t *)((uintptr_t)p + 0x28) == (uint8_t)playerId)
+      return p;
+  }
+  return nullptr;
+}
+
+static void *ResolveTargetPlayer(int playerSelector) {
+  void *target = GetPlayerByPlayerId(playerSelector);
+  if (IsValid(target))
+    return target;
+  target = GetPlayerByIndex(playerSelector);
+  if (IsValid(target))
+    return target;
+  return GetPlayerByIndex(playerSelector - 1);
+}
+
 // RoleManager.SetRole(PlayerControl, RoleTypes) — RVA: 0x60FA50
 // Direct call: works regardless of host status, bypasses server authority.
-typedef void (__cdecl *RoleManager_SetRole_fn)(void*, void*, uint16_t, void*);
+typedef void(__cdecl *RoleManager_SetRole_fn)(void *, void *, uint16_t, void *);
 
-// Get RoleManager.Instance via static field _instance (offset 0x0 in static table)
+// Get RoleManager.Instance via static field _instance (offset 0x0 in static
+// table)
 static void *GetRoleManager() {
-  if (!RoleManager::klass) return nullptr;
-  void *field = il2cpp_class_get_field_from_name(RoleManager::klass, "_instance");
-  if (!field) return nullptr;
+  if (!RoleManager::klass)
+    return nullptr;
+  void *field =
+      il2cpp_class_get_field_from_name(RoleManager::klass, "_instance");
+  if (!field)
+    return nullptr;
   void *inst = nullptr;
   il2cpp_field_static_get_value(field, &inst);
   return IsValid(inst) ? inst : nullptr;
 }
 
+static bool IsGhostRoleType(uint16_t roleType) {
+  return roleType == 6 || roleType == 7;
+}
+
+static uint16_t ResolveAliveRoleType(void *cachedPlayerData) {
+  if (!IsValid(cachedPlayerData))
+    return 0;
+
+  uint16_t currentRole = *(uint16_t *)((uintptr_t)cachedPlayerData + 0x38);
+  bool hasRoleWhenAlive = *(bool *)((uintptr_t)cachedPlayerData + 0x3C);
+  uint16_t roleWhenAlive =
+      hasRoleWhenAlive ? *(uint16_t *)((uintptr_t)cachedPlayerData + 0x3A) : 0;
+
+  if (hasRoleWhenAlive && !IsGhostRoleType(roleWhenAlive))
+    return roleWhenAlive;
+  if (IsGhostRoleType(currentRole))
+    return (currentRole == 7) ? 1 : 0;
+  return currentRole;
+}
+
 // Apply role both client-side (memory) and server-side (RoleManager + Rpc)
 static void ApplyRoleToPlayer(void *targetPc, int roleType) {
-  if (!IsValid(targetPc) || !gameAssembly) return;
+  if (!IsValid(targetPc) || !gameAssembly)
+    return;
 
-  // 1. Client-side: write roleType directly into CachedPlayerData.Role (offset 0x38)
+  // 1. Client-side: write roleType directly into CachedPlayerData.Role (offset
+  // 0x38)
   void *data = *(void **)((uintptr_t)targetPc + 0x58); // CachedPlayerData
   if (IsValid(data))
     *(uint16_t *)((uintptr_t)data + 0x38) = (uint16_t)roleType;
@@ -961,83 +1713,143 @@ static void ApplyRoleToPlayer(void *targetPc, int roleType) {
   void *rm = GetRoleManager();
   if (IsValid(rm)) {
     __try {
-      auto fn = (RoleManager_SetRole_fn)(gameAssembly + 0x60FA50);
+      auto fn =
+          (RoleManager_SetRole_fn)(gameAssembly + g_rvaRoleManagerSetRole);
       fn(rm, targetPc, (uint16_t)roleType, nullptr);
-    } __except(EXCEPTION_EXECUTE_HANDLER) {}
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
   }
 
   // 3. Network: RpcSetRole broadcasts to all clients
-  //    RVA: 0x5C99C0  signature: void(PlayerControl*, RoleTypes, bool, MethodInfo*)
+  //    RVA: 0x5C99C0  signature: void(PlayerControl*, RoleTypes, bool,
+  //    MethodInfo*)
   __try {
-    auto fn = (RpcSetRole_fn)(gameAssembly + 0x5C99C0);
+    auto fn = (RpcSetRole_fn)(gameAssembly + g_rvaRpcSetRole);
     fn(targetPc, (uint16_t)roleType, true, nullptr);
-  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
+}
+
+static void RevivePlayerControl(void *playerControl, bool syncRole) {
+  if (!IsValid(playerControl))
+    return;
+
+  void *data = *(void **)((uintptr_t)playerControl + 0x58); // CachedPlayerData
+  if (!IsValid(data))
+    return;
+
+  __try {
+    uint16_t currentRole = *(uint16_t *)((uintptr_t)data + 0x38);
+    uint16_t aliveRole = ResolveAliveRoleType(data);
+
+    // Clear death/ejection flags first so the revive call is not ignored.
+    *(bool *)((uintptr_t)data + 0x54) = false; // IsDead
+    *(bool *)((uintptr_t)data + 0x55) = false; // WasEjected
+
+    // Recover locomotion flags that can stay stale when reviving mid-round.
+    *(bool *)((uintptr_t)playerControl + 0x38) = true;  // moveable
+    *(bool *)((uintptr_t)playerControl + 0x48) = false; // inVent
+
+    if (aliveRole != currentRole) {
+      if (syncRole)
+        ApplyRoleToPlayer(playerControl, (int)aliveRole);
+      else
+        *(uint16_t *)((uintptr_t)data + 0x38) = aliveRole;
+    }
+
+    EnsurePlayerControlMethods();
+    if (pc_revive_method)
+      il2cpp_runtime_invoke(pc_revive_method, playerControl, nullptr, nullptr);
+
+    // Re-apply once after Revive in case game logic writes dead state back.
+    *(bool *)((uintptr_t)data + 0x54) = false;
+    *(bool *)((uintptr_t)data + 0x55) = false;
+    *(bool *)((uintptr_t)playerControl + 0x38) = true;
+    *(bool *)((uintptr_t)playerControl + 0x48) = false;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
 }
 
 void SetRole(int roleType) {
   Attach();
   void *lp = GetLocalPlayer();
-  if (!IsValid(lp)) return;
+  if (!IsValid(lp))
+    return;
   ApplyRoleToPlayer(lp, roleType);
+  isImpostor =
+      (roleType == 1 || roleType == 5 || roleType == 7 || roleType == 9 || roleType == 18);
 }
 
 void SetPlayerRole(int playerIndex, int roleType) {
   Attach();
-  // playerIndex from UI is 1-based offset into AllPlayerControls,
-  // but we stored other players starting at index 0 in Game::players.
-  // GetPlayerByIndex(0) = first in AllPlayerControls list.
-  // Try 0-based first, fallback to (playerIndex-1).
-  void *target = GetPlayerByIndex(playerIndex);
-  if (!IsValid(target)) target = GetPlayerByIndex(playerIndex - 1);
-  if (!IsValid(target)) return;
+  void *target = ResolveTargetPlayer(playerIndex);
+  if (!IsValid(target))
+    return;
   ApplyRoleToPlayer(target, roleType);
 }
 
 // MurderPlayer RVA: 0x5C5D70  (direct kill, no role check)
 // RpcMurderPlayer RVA: 0x5C8CC0 (network sync)
-typedef void (__cdecl *MurderPlayer_fn)(void*, void*, uint32_t, void*);
-typedef void (__cdecl *RpcMurderPlayer_fn)(void*, void*, bool, void*);
+typedef void(__cdecl *MurderPlayer_fn)(void *, void *, uint32_t, void *);
+typedef void(__cdecl *RpcMurderPlayer_fn)(void *, void *, bool, void *);
 
 void KillPlayer(int playerIndex) {
   Attach();
   void *lp = GetLocalPlayer();
-  void *target = GetPlayerByIndex(playerIndex);
-  if (!IsValid(lp) || !IsValid(target) || !gameAssembly) return;
+  void *target = ResolveTargetPlayer(playerIndex);
+  if (!IsValid(lp) || !IsValid(target) || !gameAssembly)
+    return;
   __try {
-    // MurderPlayer directly — bypasses impostor role check
-    auto fn = (MurderPlayer_fn)(gameAssembly + 0x5C5D70);
-    fn(lp, target, 0, nullptr); // MurderResultFlags=0 (no flag)
-    // Also RPC to sync death to other clients
-    auto rpc = (RpcMurderPlayer_fn)(gameAssembly + 0x5C8CC0);
+    auto fn = (MurderPlayer_fn)(gameAssembly + g_rvaMurderPlayer);
+    fn(lp, target, 1, nullptr); // MurderResultFlags::Succeeded
+    auto rpc = (RpcMurderPlayer_fn)(gameAssembly + g_rvaRpcMurderPlayer);
     rpc(lp, target, true, nullptr);
-  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
 }
 
 void KillAllPlayers() {
   Attach();
   void *lp = GetLocalPlayer();
-  if (!IsValid(lp) || !gameAssembly) return;
-  auto murder = (MurderPlayer_fn)(gameAssembly + 0x5C5D70);
-  auto rpcMurder = (RpcMurderPlayer_fn)(gameAssembly + 0x5C8CC0);
-  void *field = il2cpp_class_get_field_from_name(PlayerControl::klass, "AllPlayerControls");
+  if (!IsValid(lp) || !gameAssembly)
+    return;
+  auto murder = (MurderPlayer_fn)(gameAssembly + g_rvaMurderPlayer);
+  auto rpcMurder = (RpcMurderPlayer_fn)(gameAssembly + g_rvaRpcMurderPlayer);
+  void *field = il2cpp_class_get_field_from_name(PlayerControl::klass,
+                                                 "AllPlayerControls");
   void *list = nullptr;
-  if (field) il2cpp_field_static_get_value(field, &list);
-  if (!IsValid(list)) return;
-  struct L { void *k; void *m; void *items; int size; };
-  struct A { void *k; void *m; void *b; int len; void *m_Items[1]; };
+  if (field)
+    il2cpp_field_static_get_value(field, &list);
+  if (!IsValid(list))
+    return;
+  struct L {
+    void *k;
+    void *m;
+    void *items;
+    int size;
+  };
+  struct A {
+    void *k;
+    void *m;
+    void *b;
+    int len;
+    void *m_Items[1];
+  };
   L *l = (L *)list;
-  if (!IsValid(l->items)) return;
+  if (!IsValid(l->items))
+    return;
   A *a = (A *)l->items;
   __try {
     for (int i = 0; i < l->size && i < a->len; i++) {
       void *p = a->m_Items[i];
       if (IsValid(p) && p != lp) {
-        murder(lp, p, 0, nullptr);
+        murder(lp, p, 1, nullptr);
         rpcMurder(lp, p, true, nullptr);
-        Sleep(100);
+        Sleep(50);
       }
     }
-  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
 }
 
 // CmdReportDeadBody RVA: 0x5C2150
@@ -1045,15 +1857,17 @@ void KillAllPlayers() {
 void ReportBody(int playerIndex) {
   Attach();
   void *lp = GetLocalPlayer();
-  void *target = GetPlayerByIndex(playerIndex);
-  if (!IsValid(lp) || !gameAssembly) return;
+  void *target = ResolveTargetPlayer(playerIndex);
+  if (!IsValid(lp) || !gameAssembly)
+    return;
   void *data = nullptr;
   if (IsValid(target))
     data = *(void **)((uintptr_t)target + 0x58); // CachedPlayerData
   __try {
-    auto fn = (CmdReportDeadBody_fn)(gameAssembly + 0x5C2150);
+    auto fn = (CmdReportDeadBody_fn)(gameAssembly + g_rvaCmdReportDeadBody);
     fn(lp, data, nullptr); // null = self report / emergency
-  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
 }
 
 // RpcSetVisor RVA: 0x5C9D90
@@ -1061,13 +1875,18 @@ void ReportBody(int playerIndex) {
 void SetVisor(int visorId) {
   Attach();
   void *lp = GetLocalPlayer();
-  if (!IsValid(lp) || !gameAssembly || !il2cpp_string_new) return;
-  const char* ids[] = {"visor_EmptyVisor","visor_lollipopCrew","visor_lollipopImp","visor_starCrew","visor_pk01_AngeryVisor"};
-  if (visorId < 0 || visorId > 4) return;
+  if (!IsValid(lp) || !gameAssembly || !il2cpp_string_new)
+    return;
+  const char *ids[] = {"visor_EmptyVisor", "visor_lollipopCrew",
+                       "visor_lollipopImp", "visor_starCrew",
+                       "visor_pk01_AngeryVisor"};
+  if (visorId < 0 || visorId > 4)
+    return;
   __try {
-    auto fn = (RpcSetVisor_fn)(gameAssembly + 0x5C9D90);
+    auto fn = (RpcSetVisor_fn)(gameAssembly + g_rvaRpcSetVisor);
     fn(lp, il2cpp_string_new(ids[visorId]), nullptr);
-  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
 }
 
 // RpcSetNamePlate RVA: 0x5C96C0
@@ -1075,13 +1894,18 @@ void SetVisor(int visorId) {
 void SetNamePlate(int npId) {
   Attach();
   void *lp = GetLocalPlayer();
-  if (!IsValid(lp) || !gameAssembly || !il2cpp_string_new) return;
-  const char* ids[] = {"nameplate_NoPlate","nameplate_airship_Toppat","nameplate_airship_CCC","nameplate_airship_Government","nameplate_is_yard"};
-  if (npId < 0 || npId > 4) return;
+  if (!IsValid(lp) || !gameAssembly || !il2cpp_string_new)
+    return;
+  const char *ids[] = {"nameplate_NoPlate", "nameplate_airship_Toppat",
+                       "nameplate_airship_CCC", "nameplate_airship_Government",
+                       "nameplate_is_yard"};
+  if (npId < 0 || npId > 4)
+    return;
   __try {
-    auto fn = (RpcSetNamePlate_fn)(gameAssembly + 0x5C96C0);
+    auto fn = (RpcSetNamePlate_fn)(gameAssembly + g_rvaRpcSetNamePlate);
     fn(lp, il2cpp_string_new(ids[npId]), nullptr);
-  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
 }
 
 // RpcSetLevel RVA: 0x5C9620
@@ -1089,26 +1913,41 @@ void SetNamePlate(int npId) {
 void SetLevel(int level) {
   Attach();
   void *lp = GetLocalPlayer();
-  if (!IsValid(lp) || !gameAssembly) return;
+  if (!IsValid(lp) || !gameAssembly)
+    return;
   __try {
-    // Write level directly to PlayerData.Level field (offset 0x40)
+    // Among Us stores level internally as (displayLevel - 1).
+    // The game displays stats.level + 1. To show level N, write N-1.
+    uint32_t storedLevel = (level > 0) ? (uint32_t)(level - 1) : 0;
+
+    // Write to NetworkedPlayerInfo.PlayerLevel field (offset 0x44)
     void *data = *(void **)((uintptr_t)lp + 0x58);
     if (IsValid(data))
-      *(uint32_t *)((uintptr_t)data + 0x40) = (uint32_t)level;
-    // Also broadcast via RPC
-    auto fn = (RpcSetLevel_fn)(gameAssembly + 0x5C9620);
-    fn(lp, (uint32_t)level, nullptr);
-  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+      *(uint32_t *)((uintptr_t)data + 0x44) = storedLevel;
+    EnsurePlayerControlMethods();
+    auto rpcSetLevel = (RpcSetLevel_fn)(gameAssembly + g_rvaRpcSetLevel);
+    if (pc_setLevel_method) {
+      void *p[1] = {&storedLevel};
+      il2cpp_runtime_invoke(pc_setLevel_method, lp, p, nullptr);
+    }
+    rpcSetLevel(lp, storedLevel, nullptr);
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
 }
 
 void RevivePlayer() {
   Attach();
   void *lp = GetLocalPlayer();
-  if (!IsValid(lp)) return;
-  // Set IsDead = false on CachedPlayerData
+  if (!IsValid(lp))
+    return;
+
+  RevivePlayerControl(lp, true);
+
   void *data = *(void **)((uintptr_t)lp + 0x58);
-  if (IsValid(data))
-    *(bool *)((uintptr_t)data + 0x54) = false; // IsDead = false
+  if (IsValid(data)) {
+    uint16_t role = *(uint16_t *)((uintptr_t)data + 0x38);
+    isImpostor = (role == 1 || role == 5 || role == 7 || role == 9 || role == 18);
+  }
 }
 
 // RpcShapeshift RVA: 0x5C9ED0
@@ -1116,12 +1955,14 @@ void RevivePlayer() {
 void ShapeshiftTo(int playerIndex) {
   Attach();
   void *lp = GetLocalPlayer();
-  void *target = GetPlayerByIndex(playerIndex);
-  if (!IsValid(lp) || !IsValid(target) || !gameAssembly) return;
+  void *target = ResolveTargetPlayer(playerIndex);
+  if (!IsValid(lp) || !IsValid(target) || !gameAssembly)
+    return;
   __try {
-    auto fn = (RpcShapeshift_fn)(gameAssembly + 0x5C9ED0);
+    auto fn = (RpcShapeshift_fn)(gameAssembly + g_rvaRpcShapeshift);
     fn(lp, target, true, nullptr);
-  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
 }
 
 // RpcVanish RVA: 0x5CA3E0
@@ -1129,11 +1970,13 @@ void ShapeshiftTo(int playerIndex) {
 void Vanish() {
   Attach();
   void *lp = GetLocalPlayer();
-  if (!IsValid(lp) || !gameAssembly) return;
+  if (!IsValid(lp) || !gameAssembly)
+    return;
   __try {
-    auto fn = (RpcVanish_fn)(gameAssembly + 0x5CA3E0);
+    auto fn = (RpcVanish_fn)(gameAssembly + g_rvaRpcVanish);
     fn(lp, nullptr);
-  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
 }
 
 // RpcAppear RVA: 0x5C8BA0
@@ -1141,11 +1984,13 @@ void Vanish() {
 void Appear() {
   Attach();
   void *lp = GetLocalPlayer();
-  if (!IsValid(lp) || !gameAssembly) return;
+  if (!IsValid(lp) || !gameAssembly)
+    return;
   __try {
-    auto fn = (RpcAppear_fn)(gameAssembly + 0x5C8BA0);
+    auto fn = (RpcAppear_fn)(gameAssembly + g_rvaRpcAppear);
     fn(lp, true, nullptr);
-  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
 }
 
 // Vent RPCs: Enter 0x5E3250, Exit 0x5E3340
@@ -1153,64 +1998,80 @@ void Appear() {
 void EnterVent(int ventId) {
   Attach();
   void *lp = GetLocalPlayer();
-  if (!IsValid(lp) || !gameAssembly) return;
+  if (!IsValid(lp) || !gameAssembly)
+    return;
   void *phys = *(void **)((uintptr_t)lp + 0x94); // MyPhysics (PlayerPhysics)
-  if (!IsValid(phys)) return;
+  if (!IsValid(phys))
+    return;
   __try {
-    auto fn = (RpcVent_fn)(gameAssembly + 0x5E3250);
+    auto fn = (RpcVent_fn)(gameAssembly + g_rvaRpcEnterVent);
     fn(phys, ventId, nullptr);
-  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
 }
 
 void ExitVent(int ventId) {
   Attach();
   void *lp = GetLocalPlayer();
-  if (!IsValid(lp) || !gameAssembly) return;
+  if (!IsValid(lp) || !gameAssembly)
+    return;
   void *phys = *(void **)((uintptr_t)lp + 0x94);
-  if (!IsValid(phys)) return;
+  if (!IsValid(phys))
+    return;
   __try {
-    auto fn = (RpcVent_fn)(gameAssembly + 0x5E3340);
+    auto fn = (RpcVent_fn)(gameAssembly + g_rvaRpcExitVent);
     fn(phys, ventId, nullptr);
-  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
 }
 
 // RpcCloseDoorsOfType RVA: 0x637E00
 
 void CloseDoors(int roomType) {
   Attach();
-  if (!ShipStatus::klass || !gameAssembly) return;
+  if (!ShipStatus::klass || !gameAssembly)
+    return;
   void *field = il2cpp_class_get_field_from_name(ShipStatus::klass, "Instance");
   void *inst = nullptr;
-  if (field) il2cpp_field_static_get_value(field, &inst);
-  if (!IsValid(inst)) return;
+  if (field)
+    il2cpp_field_static_get_value(field, &inst);
+  if (!IsValid(inst))
+    return;
   __try {
-    auto fn = (RpcCloseDoors_fn)(gameAssembly + 0x637E00);
+    auto fn = (RpcCloseDoors_fn)(gameAssembly + g_rvaRpcCloseDoorsOfType);
     fn(inst, roomType, nullptr);
-  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
 }
 
 // RpcUpdateSystem RVA: 0x637EB0
 
 void RepairSabotage(int systemType) {
   Attach();
-  if (!ShipStatus::klass || !gameAssembly) return;
+  if (!ShipStatus::klass || !gameAssembly)
+    return;
   void *field = il2cpp_class_get_field_from_name(ShipStatus::klass, "Instance");
   void *inst = nullptr;
-  if (field) il2cpp_field_static_get_value(field, &inst);
-  if (!IsValid(inst)) return;
+  if (field)
+    il2cpp_field_static_get_value(field, &inst);
+  if (!IsValid(inst))
+    return;
   __try {
     // amount = 128 fixes most sabotages
-    auto fn = (RpcUpdateSystem_fn)(gameAssembly + 0x637EB0);
+    auto fn = (RpcUpdateSystem_fn)(gameAssembly + g_rvaRpcUpdateSystem);
     fn(inst, systemType, 128, nullptr);
-  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
 }
 
 void TeleportToPlayer(int playerIndex) {
   Attach();
-  void *target = GetPlayerByIndex(playerIndex);
-  if (!IsValid(target)) return;
+  void *target = ResolveTargetPlayer(playerIndex);
+  if (!IsValid(target))
+    return;
   void *nt = *(void **)((uintptr_t)target + 0x98);
-  if (!IsValid(nt)) return;
+  if (!IsValid(nt))
+    return;
   float x = *(float *)((uintptr_t)nt + 0x44);
   float y = *(float *)((uintptr_t)nt + 0x48);
   TeleportTo(x, y);
@@ -1221,12 +2082,14 @@ void TeleportToPlayer(int playerIndex) {
 void ProtectPlayer(int playerIndex) {
   Attach();
   void *lp = GetLocalPlayer();
-  void *target = GetPlayerByIndex(playerIndex);
-  if (!IsValid(lp) || !IsValid(target) || !gameAssembly) return;
+  void *target = ResolveTargetPlayer(playerIndex);
+  if (!IsValid(lp) || !IsValid(target) || !gameAssembly)
+    return;
   __try {
-    auto fn = (RpcProtectPlayer_fn)(gameAssembly + 0x5C8E70);
+    auto fn = (RpcProtectPlayer_fn)(gameAssembly + g_rvaRpcProtectPlayer);
     fn(lp, target, 0, nullptr);
-  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
 }
 
 void CloseAllDoors() {
@@ -1241,36 +2104,56 @@ void FixAllSabotage() {
     RepairSabotage(i);
 }
 
-void SendChat(const char* msg) {
+void SendChat(const char *msg) {
   Attach();
   void *lp = GetLocalPlayer();
-  if (!IsValid(lp) || !gameAssembly || !il2cpp_string_new) return;
+  if (!IsValid(lp) || !gameAssembly || !il2cpp_string_new)
+    return;
   __try {
-    auto fn = (RpcSendChat_fn)(gameAssembly + 0x5C90C0);
+    auto fn = (RpcSendChat_fn)(gameAssembly + g_rvaRpcSendChat);
     fn(lp, il2cpp_string_new(msg), nullptr);
-  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
 }
 
 void TeleportAllToSelf() {
   Attach();
   void *lp = GetLocalPlayer();
-  if (!IsValid(lp) || !gameAssembly) return;
+  if (!IsValid(lp) || !gameAssembly)
+    return;
   void *myNt = *(void **)((uintptr_t)lp + 0x98);
-  if (!IsValid(myNt)) return;
+  if (!IsValid(myNt))
+    return;
   float mx = *(float *)((uintptr_t)myNt + 0x44);
   float my = *(float *)((uintptr_t)myNt + 0x48);
 
-  if (!PlayerControl::klass) return;
-  void *field = il2cpp_class_get_field_from_name(PlayerControl::klass, "AllPlayerControls");
+  if (!PlayerControl::klass)
+    return;
+  void *field = il2cpp_class_get_field_from_name(PlayerControl::klass,
+                                                 "AllPlayerControls");
   void *list = nullptr;
-  if (field) il2cpp_field_static_get_value(field, &list);
-  if (!IsValid(list)) return;
-  struct L { void *k; void *m; void *items; int size; };
-  struct A { void *k; void *m; void *b; int len; void *m_Items[1]; };
+  if (field)
+    il2cpp_field_static_get_value(field, &list);
+  if (!IsValid(list))
+    return;
+  struct L {
+    void *k;
+    void *m;
+    void *items;
+    int size;
+  };
+  struct A {
+    void *k;
+    void *m;
+    void *b;
+    int len;
+    void *m_Items[1];
+  };
   L *l = (L *)list;
-  if (!IsValid(l->items)) return;
+  if (!IsValid(l->items))
+    return;
   A *a = (A *)l->items;
-  auto fn = (RpcSnapTo_fn)(gameAssembly + 0x535E60);
+  auto fn = (RpcSnapTo_fn)(gameAssembly + g_rvaRpcSnapTo);
   __try {
     for (int i = 0; i < l->size && i < a->len; i++) {
       void *p = a->m_Items[i];
@@ -1280,32 +2163,53 @@ void TeleportAllToSelf() {
           fn(nt, mx, my, nullptr);
       }
     }
-  } __except(EXCEPTION_EXECUTE_HANDLER) {}
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
 }
 
 void SetDiscussionTime(float time) {
-  if (!GameOptionsManager::klass) return;
-  void *field = il2cpp_class_get_field_from_name(GameOptionsManager::klass, "<Instance>k__BackingField");
+  if (!GameOptionsManager::klass)
+    return;
+  void *field = il2cpp_class_get_field_from_name(GameOptionsManager::klass,
+                                                 "<Instance>k__BackingField");
   void *inst = nullptr;
-  if (field) il2cpp_field_static_get_value(field, &inst);
-  if (!IsValid(inst)) return;
+  if (field)
+    il2cpp_field_static_get_value(field, &inst);
+  if (!IsValid(inst))
+    return;
   void *opt = *(void **)((uintptr_t)inst + 0x18);
   if (IsValid(opt))
-    *(int *)((uintptr_t)opt + 0x2C) = (int)time; // DiscussionTime
+    *(int *)((uintptr_t)opt + 0x48) = (int)time; // DiscussionTime
 }
 
 void SetVotingTime(float time) {
-  if (!GameOptionsManager::klass) return;
-  void *field = il2cpp_class_get_field_from_name(GameOptionsManager::klass, "<Instance>k__BackingField");
+  if (!GameOptionsManager::klass)
+    return;
+  void *field = il2cpp_class_get_field_from_name(GameOptionsManager::klass,
+                                                 "<Instance>k__BackingField");
   void *inst = nullptr;
-  if (field) il2cpp_field_static_get_value(field, &inst);
-  if (!IsValid(inst)) return;
+  if (field)
+    il2cpp_field_static_get_value(field, &inst);
+  if (!IsValid(inst))
+    return;
   void *opt = *(void **)((uintptr_t)inst + 0x18);
   if (IsValid(opt))
-    *(int *)((uintptr_t)opt + 0x30) = (int)time; // VotingTime
+    *(int *)((uintptr_t)opt + 0x4C) = (int)time; // VotingTime
 }
 
 void SetEmergencyCount(int count) {
+  if (GameOptionsManager::klass) {
+    void *field = il2cpp_class_get_field_from_name(GameOptionsManager::klass,
+                                                   "<Instance>k__BackingField");
+    void *inst = nullptr;
+    if (field)
+      il2cpp_field_static_get_value(field, &inst);
+    if (IsValid(inst)) {
+      void *opt = *(void **)((uintptr_t)inst + 0x18);
+      if (IsValid(opt))
+        *(int *)((uintptr_t)opt + 0x34) = count; // NumEmergencyMeetings
+    }
+  }
   void *lp = GetLocalPlayer();
   if (IsValid(lp))
     *(int *)((uintptr_t)lp + 0x84) = count; // RemainingEmergencies
