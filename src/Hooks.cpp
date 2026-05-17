@@ -160,6 +160,7 @@ bool Hooks::Init() {
 void Hooks::Shutdown() {
     if (!s_init) return;
     MH_DisableHook(MH_ALL_HOOKS);
+    Sleep(100); // let in-flight hkPresent calls drain before teardown
     MH_RemoveHook(MH_ALL_HOOKS);
     MH_Uninitialize();
 

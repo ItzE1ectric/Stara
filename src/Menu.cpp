@@ -226,7 +226,6 @@ static void EnsureBoltIconLoaded() {
   g_boltIcon.attempted = true;
 
   const wchar_t *paths[] = {
-      L"C:\\Users\\xklyo\\Downloads\\bolt.png",
       L"assets\\icons\\bolt.png",
       L"assets\\bolt.png",
       L"bolt.png",
@@ -243,7 +242,6 @@ static void EnsureDiscordPfpLoaded() {
   g_discordPfp.attempted = true;
 
   const wchar_t *paths[] = {
-      L"C:\\Users\\xklyo\\Downloads\\discord_pfp.png",
       L"assets\\icons\\discord_pfp.png",
       L"assets\\discord_pfp.png",
       L"discord_pfp.png",
@@ -1218,16 +1216,25 @@ static void DrawPresetBankCard(const char *title, int startId, int count,
 }
 static void TabDashboard() {
   Card("Profile");
-  ImGui::Text("Player: %s", g_nameBuf);
-  ImGui::SameLine(200);
+  ImGui::TextColored({.75f, .82f, .95f, 1}, "Player:");
+  ImGui::SameLine();
+  ImGui::TextColored({1, 1, 1, 1}, "%s", g_nameBuf);
+  ImGui::SameLine(220);
   ImGui::TextColored({0, 1, .5f, 1}, "Online");
-  ImGui::Text("Version: %s", APP_VERSION);
+  ImGui::TextColored({.75f, .82f, .95f, 1}, "Version:");
+  ImGui::SameLine();
+  ImGui::TextColored({1, 1, 1, 1}, "%s", APP_VERSION);
   bool dumpLoaded = DumpDatabase::IsLoaded();
-  ImGui::Text("Dump.cs: %s", dumpLoaded ? "Loaded" : "Not Found");
+  ImGui::TextColored({.75f, .82f, .95f, 1}, "Dump.cs:");
+  ImGui::SameLine();
+  ImGui::TextColored(dumpLoaded ? ImVec4{.3f, 1, .5f, 1}
+                                : ImVec4{1, .5f, .3f, 1},
+                     "%s", dumpLoaded ? "Loaded" : "Not Found");
   if (dumpLoaded) {
-    ImGui::Text("Dump Index: %zu methods | %zu fields | %zu types",
-                DumpDatabase::MethodCount(), DumpDatabase::FieldCount(),
-                DumpDatabase::ClassCount());
+    ImGui::TextColored({.65f, .72f, .85f, 1},
+                       "%zu methods | %zu fields | %zu types",
+                       DumpDatabase::MethodCount(), DumpDatabase::FieldCount(),
+                       DumpDatabase::ClassCount());
   } else {
     ImGui::TextColored({1.f, 0.72f, 0.35f, 1.f},
                        "Tip: set STARA_DUMP_PATH to your dump.cs file.");
@@ -1235,60 +1242,80 @@ static void TabDashboard() {
   EndCard();
 
   Card("Live Player Info");
-  if (!Game::isInGame) {
-    ImGui::TextColored({1.f, 0.6f, 0.3f, 1.f}, "Not in a game session.");
+  if (!Game::isInGame && !Game::isInLobby) {
+    ImGui::TextColored({1.f, 0.6f, 0.3f, 1.f}, "Not connected to a game.");
   } else {
-    // Role
-    ImVec4 roleCol = Game::isImpostor ? ImVec4{1, .2f, .2f, 1}
-                                      : ImVec4{.3f, 1, .5f, 1};
-    ImGui::TextColored(roleCol, "Role: %s", Game::localRoleName.c_str());
-    ImGui::SameLine(200);
-    ImGui::TextColored(Game::isImpostor ? ImVec4{1, .3f, .3f, 1}
-                                        : ImVec4{.5f, 1, .5f, 1},
-                       Game::isImpostor ? "[IMPOSTOR]" : "[CREW]");
-
-    // Host status
-    ImGui::SameLine(300);
+    // State badge
+    if (Game::isInGame)
+      ImGui::TextColored({.3f, 1, .5f, 1}, "IN GAME");
+    else
+      ImGui::TextColored({.4f, .85f, 1, 1}, "IN LOBBY");
+    ImGui::SameLine(120);
     if (Game::IsHost())
       ImGui::TextColored({1.f, 0.85f, 0.2f, 1.f}, "[HOST]");
     else
-      ImGui::TextColored({0.5f, 0.5f, 0.6f, 1.f}, "[CLIENT]");
+      ImGui::TextColored({0.65f, 0.65f, 0.75f, 1.f}, "[CLIENT]");
+
+    ImGui::Spacing();
+
+    // Role (in-game only)
+    if (Game::isInGame) {
+      ImVec4 roleCol = Game::isImpostor ? ImVec4{1, .2f, .2f, 1}
+                                        : ImVec4{.3f, 1, .5f, 1};
+      ImGui::TextColored({.75f, .82f, .95f, 1}, "Role:");
+      ImGui::SameLine();
+      ImGui::TextColored(roleCol, "%s %s", Game::localRoleName.c_str(),
+                         Game::isImpostor ? "[IMP]" : "[CREW]");
+    }
 
     // Level
-    ImGui::Text("Level: %d", Game::localLevel);
+    ImGui::TextColored({.75f, .82f, .95f, 1}, "Level:");
+    ImGui::SameLine();
+    ImGui::TextColored({1, 1, 1, 1}, "%d", Game::localLevel);
 
     // Color
     {
-      const char *colorNames[] = {"Red",    "Blue",  "Green",  "Pink",
-                                  "Orange", "Yellow", "Black", "White",
-                                  "Purple", "Brown",  "Cyan",  "Lime",
+      const char *colorNames[] = {"Red",    "Blue",   "Green",  "Pink",
+                                  "Orange", "Yellow", "Black",  "White",
+                                  "Purple", "Brown",  "Cyan",   "Lime",
                                   "Maroon", "Rose",   "Banana", "Gray",
                                   "Tan",    "Coral"};
       int cid = Game::localColorId;
+      ImGui::TextColored({.75f, .82f, .95f, 1}, "Color:");
+      ImGui::SameLine();
       if (cid >= 0 && cid < 18)
-        ImGui::Text("Color: %s (%d)", colorNames[cid], cid);
+        ImGui::TextColored({1, 1, 1, 1}, "%s (%d)", colorNames[cid], cid);
       else
-        ImGui::Text("Color: %d", cid);
+        ImGui::TextColored({.7f, .7f, .7f, 1}, "Unknown (%d)", cid);
     }
 
     // Position
-    ImGui::Text("Position: (%.1f, %.1f)", Game::localX, Game::localY);
+    ImGui::TextColored({.75f, .82f, .95f, 1}, "Position:");
+    ImGui::SameLine();
+    ImGui::TextColored({1, 1, 1, 1}, "(%.1f, %.1f)", Game::localX,
+                       Game::localY);
 
     // Speed
-    ImGui::Text("Speed: %.1f", g_walkSpeed);
+    ImGui::TextColored({.75f, .82f, .95f, 1}, "Speed:");
+    ImGui::SameLine();
+    ImGui::TextColored({1, 1, 1, 1}, "%.1f", g_walkSpeed);
 
     // Meeting status
     if (Game::isInMeeting)
-      ImGui::TextColored({1, .4f, .4f, 1}, "Currently in MEETING");
+      ImGui::TextColored({1, .4f, .4f, 1}, ">> IN MEETING <<");
 
     // Player count
     int alive = 0, imps = 0;
     for (const auto &p : Game::players) {
-      if (!p.isDead) alive++;
-      if (p.isImpostor && !p.isDead) imps++;
+      if (!p.isDead)
+        alive++;
+      if (p.isImpostor && !p.isDead)
+        imps++;
     }
-    ImGui::Text("Players: %d alive (%d impostors)",
-                alive + 1, imps + (Game::isImpostor ? 1 : 0));
+    ImGui::TextColored({.75f, .82f, .95f, 1}, "Players:");
+    ImGui::SameLine();
+    ImGui::TextColored({1, 1, 1, 1}, "%d alive (%d impostors)", alive + 1,
+                       imps + (Game::isImpostor ? 1 : 0));
   }
   EndCard();
 
@@ -1346,10 +1373,23 @@ static void TabDashboard() {
 
 static void TabPlayer() {
   Card("Player Settings");
-  if (Game::isInGame) {
-    ImGui::TextColored({.5f, .85f, 1, 1}, "Current Level: %d | Role: %s | Pos: (%.1f, %.1f)",
-                       Game::localLevel, Game::localRoleName.c_str(),
-                       Game::localX, Game::localY);
+  if (Game::isInGame || Game::isInLobby) {
+    ImGui::TextColored({.75f, .82f, .95f, 1}, "Level:");
+    ImGui::SameLine();
+    ImGui::TextColored({1, 1, 1, 1}, "%d", Game::localLevel);
+    ImGui::SameLine(0, 20);
+    if (Game::isInGame) {
+      ImVec4 rc = Game::isImpostor ? ImVec4{1, .3f, .3f, 1}
+                                   : ImVec4{.3f, 1, .5f, 1};
+      ImGui::TextColored({.75f, .82f, .95f, 1}, "Role:");
+      ImGui::SameLine();
+      ImGui::TextColored(rc, "%s", Game::localRoleName.c_str());
+      ImGui::SameLine(0, 20);
+      ImGui::TextColored({.75f, .82f, .95f, 1}, "Pos:");
+      ImGui::SameLine();
+      ImGui::TextColored({1, 1, 1, 1}, "(%.1f, %.1f)", Game::localX,
+                         Game::localY);
+    }
     ImGui::Separator();
   }
   Toggle("NoClip", &g_noclip);
@@ -1364,9 +1404,11 @@ static void TabPlayer() {
   static int g_level = 100;
   ImGui::InputInt("Level##p", &g_level);
   ImGui::SameLine();
-  ImGui::TextColored({.6f, .6f, .75f, 1}, "(Current: %d)", Game::localLevel);
+  ImGui::TextColored({.8f, .85f, 1, 1}, "(Current: %d)", Game::localLevel);
   if (ImGui::IsItemDeactivatedAfterEdit())
     Game::SetLevel(g_level);
+  if (!Game::IsHost())
+    ImGui::TextColored({1, .85f, .3f, 1}, "Level: local only (others see original).");
   EndCard();
 
   Card("Role");
@@ -1503,10 +1545,10 @@ static void TabVisuals() {
   }
   EndCard();
   Card("Camera");
-  Slider("FOV##v", &g_fov, 30, 160, "%.0f");
-  Slider("Camera Zoom##v", &g_zoom, 0.5f, 5, "%.2f");
-  Slider("Bloom##v", &g_bloom, 0, 2);
-  Slider("Theme Intensity##v", &g_themeInt, 0, 2);
+  if (Slider("Camera Zoom##v", &g_zoom, 1.0f, 12.0f, "%.1f"))
+    Game::SetCameraZoom(g_zoom);
+  ImGui::TextColored({.65f, .72f, .85f, 1},
+                     "Zoom out to see more of the map.");
   EndCard();
   Card("Effects");
   Toggle("RGB Accent##v", &g_rgbAccent);
@@ -1618,6 +1660,9 @@ static void TabMovement() {
   Toggle("Smooth Movement##m", &g_smoothMove);
   Slider("Animation Speed##m", &g_animSpeed, 0.1f, 5);
   Toggle("Auto Path##m", &g_autoPath);
+  if (g_autoPath)
+    ImGui::TextColored({.65f, .72f, .85f, 1},
+                       "Walking in a circle around your position.");
   EndCard();
   Card("Teleport");
   static float tpX = 0, tpY = 0;
@@ -1629,11 +1674,29 @@ static void TabMovement() {
 }
 
 static void TabFun() {
-  Card("Character Effects");
-  if (Toggle("Rainbow Character", &g_rainbow)) {
+  bool host = Game::IsHost();
+  Card("Character Effects (Host = network, Local = your screen only)");
+  {
+    if (!host)
+      ImGui::BeginDisabled();
+    if (Toggle("Rainbow Character (Host)", &g_rainbow)) {
+      if (!host)
+        g_rainbow = false;
+    }
+    if (Toggle("Spin Preview (Host)", &g_spin)) {
+      if (!host)
+        g_spin = false;
+    }
+    Toggle("Dance Animation (Host)", &g_dance);
+    if (!host && g_dance)
+      g_dance = false;
+    Toggle("Particle Effects (Host)", &g_particle);
+    if (!host && g_particle)
+      g_particle = false;
+    if (!host)
+      ImGui::EndDisabled();
   }
-  if (Toggle("Spin Preview", &g_spin)) {
-  }
+  // Local-only effects (safe for non-host)
   if (Toggle("Tiny Character", &g_tiny)) {
     if (g_tiny) {
       g_giant = false;
@@ -1648,45 +1711,68 @@ static void TabFun() {
     } else
       Game::SetCharacterScale(1.0f);
   }
-  Toggle("Dance Animation", &g_dance);
-  Toggle("Particle Effects", &g_particle);
+  if (!host)
+    ImGui::TextColored({1, .85f, .3f, 1},
+                       "Network effects require Host. Local effects always work.");
   EndCard();
-  Card("Emotes");
-  const char *emotes[] = {"Wave", "Dance", "Clap", "Dab", "Flex"};
-  for (int i = 0; i < 5; i++) {
-    if (i)
-      ImGui::SameLine();
-    if (GlowBtn(emotes[i], {60, 28})) {
-      Game::PlayAnimation((uint8_t)i);
+  Card("Emotes (Host)");
+  {
+    if (!host)
+      ImGui::BeginDisabled();
+    const char *emotes[] = {"Wave", "Dance", "Clap", "Dab", "Flex"};
+    for (int i = 0; i < 5; i++) {
+      if (i)
+        ImGui::SameLine();
+      if (GlowBtn(emotes[i], {60, 28}))
+        Game::PlayAnimation((uint8_t)i);
     }
+    if (!host)
+      ImGui::EndDisabled();
   }
   EndCard();
 }
 
 static void TabTroll() {
+  bool host = Game::IsHost();
   Card("Server Trolls");
   Toggle("Chat Spam", &g_chatSpam);
   if (GlowBtn("Force Emergency Meeting", {200, 28}))
     Game::ForceEmergencyMeeting();
-  if (GlowBtn("Force Start Game (Host)", {200, 28}))
-    Game::StartGame();
+  {
+    if (!host)
+      ImGui::BeginDisabled();
+    if (GlowBtn("Force Start Game (Host)", {200, 28}))
+      Game::StartGame();
+    if (!host)
+      ImGui::EndDisabled();
+  }
   if (GlowBtn("Force End / Leave", {200, 28}))
     Game::EndGame();
   if (GlowBtn("Complete All Tasks", {200, 28}))
     Game::CompleteAllTasks();
   EndCard();
 
-  Card("Impostor Abilities");
-  if (GlowBtn("Vanish (Phantom)", {160, 28}))
-    Game::Vanish();
-  ImGui::SameLine();
-  if (GlowBtn("Appear", {100, 28}))
-    Game::Appear();
+  Card("Impostor Abilities (Host)");
+  {
+    if (!host)
+      ImGui::BeginDisabled();
+    if (GlowBtn("Vanish (Phantom)", {160, 28}))
+      Game::Vanish();
+    ImGui::SameLine();
+    if (GlowBtn("Appear", {100, 28}))
+      Game::Appear();
+    if (!host)
+      ImGui::EndDisabled();
+    if (!host)
+      ImGui::TextColored({1, .85f, .3f, 1}, "Requires Host to use.");
+  }
   EndCard();
 
-  Card("Shapeshift");
+  Card("Shapeshift (Host)");
   if (!Game::isInGame) {
     ImGui::TextColored({1, 0.3f, 0.3f, 1}, "Not in game");
+  } else if (!host) {
+    ImGui::TextColored({1, .85f, .3f, 1}, "Requires Host to use.");
   } else {
     for (int i = 0; i < (int)Game::players.size(); i++) {
       const auto &p = Game::players[i];
@@ -1700,9 +1786,12 @@ static void TabTroll() {
   }
   EndCard();
 
-  Card("Set Player Roles");
+  Card("Set Player Roles (Host)");
   if (!Game::isInGame) {
     ImGui::TextColored({1, 0.3f, 0.3f, 1}, "Not in game");
+  } else if (!host) {
+    ImGui::TextColored({1, .85f, .3f, 1},
+                       "Requires Host. Non-host role changes are local only.");
   } else {
     const char *roleNames[] = {"Crewmate",   "Impostor",       "Scientist",
                                "Engineer",   "Guardian Angel", "Shapeshifter",
@@ -1858,51 +1947,66 @@ static void TabTroll() {
   }
   EndCard();
 
-  Card("Vents");
-  static int ventId = 0;
-  ImGui::InputInt("Vent ID##v", &ventId);
-  if (GlowBtn("Enter Vent", {120, 28}))
-    Game::EnterVent(ventId);
-  ImGui::SameLine();
-  if (GlowBtn("Exit Vent", {120, 28}))
-    Game::ExitVent(ventId);
-  EndCard();
-
-  Card("Sabotage / Doors");
-  // SystemTypes:
-  // 0=Hallway,1=Storage,2=Cafeteria,3=Reactor,4=UpperEngine,5=Navigation,
-  //              6=Admin,7=Electrical,8=O2,9=Shields,10=MedBay,11=Security,12=Weapons,
-  //              13=LowerEngine,14=ShortComms,15=LobbyComm
-  const char *rooms[] = {
-      "Hallway",    "Storage",  "Cafeteria",  "Reactor",      "Upper Engine",
-      "Navigation", "Admin",    "Electrical", "O2",           "Shields",
-      "MedBay",     "Security", "Weapons",    "Lower Engine", "Comms"};
-  static int doorRoom = 3;
-  ImGui::Combo("Room##doors", &doorRoom, rooms, 15);
-  if (GlowBtn("Close Doors", {140, 28}))
-    Game::CloseDoors(doorRoom);
-  ImGui::SameLine();
-  if (GlowBtn("Fix Sabotage", {140, 28}))
-    Game::RepairSabotage(doorRoom);
-  if (GlowBtn("Close ALL Doors", {200, 28}))
-    Game::CloseAllDoors();
-  ImGui::SameLine();
-  if (GlowBtn("Fix ALL Sabotage", {200, 28}))
-    Game::FixAllSabotage();
-  EndCard();
-
-  Card("Mass Actions");
+  Card("Vents (Host)");
   {
-    bool host = Game::IsHost();
     if (!host)
       ImGui::BeginDisabled();
-    if (GlowBtn("Teleport ALL to Self (Host)", {220, 28}))
+    static int ventId = 0;
+    ImGui::InputInt("Vent ID##v", &ventId);
+    if (GlowBtn("Enter Vent", {120, 28}))
+      Game::EnterVent(ventId);
+    ImGui::SameLine();
+    if (GlowBtn("Exit Vent", {120, 28}))
+      Game::ExitVent(ventId);
+    if (!host)
+      ImGui::EndDisabled();
+    if (!host)
+      ImGui::TextColored({1, .85f, .3f, 1}, "Requires Host to use vents.");
+  }
+  EndCard();
+
+  Card("Sabotage / Doors (Host)");
+  {
+    if (!host)
+      ImGui::BeginDisabled();
+    const char *rooms[] = {
+        "Hallway",    "Storage",  "Cafeteria",  "Reactor",      "Upper Engine",
+        "Navigation", "Admin",    "Electrical", "O2",           "Shields",
+        "MedBay",     "Security", "Weapons",    "Lower Engine", "Comms"};
+    static int doorRoom = 3;
+    ImGui::Combo("Room##doors", &doorRoom, rooms, 15);
+    if (GlowBtn("Close Doors", {140, 28}))
+      Game::CloseDoors(doorRoom);
+    ImGui::SameLine();
+    if (GlowBtn("Fix Sabotage", {140, 28}))
+      Game::RepairSabotage(doorRoom);
+    if (GlowBtn("Close ALL Doors", {200, 28}))
+      Game::CloseAllDoors();
+    ImGui::SameLine();
+    if (GlowBtn("Fix ALL Sabotage", {200, 28}))
+      Game::FixAllSabotage();
+    if (!host)
+      ImGui::EndDisabled();
+    if (!host)
+      ImGui::TextColored({1, .85f, .3f, 1}, "Requires Host to use.");
+  }
+  EndCard();
+
+  Card("Mass Actions (Host)");
+  {
+    if (!host)
+      ImGui::BeginDisabled();
+    if (GlowBtn("Teleport ALL to Self", {220, 28}))
       Game::TeleportAllToSelf();
+    Toggle("Color Cycle (Strobe)", &g_colorCycle);
+    if (!host && g_colorCycle)
+      g_colorCycle = false;
+    Toggle("Spam Animations", &g_spamAnim);
+    if (!host && g_spamAnim)
+      g_spamAnim = false;
     if (!host)
       ImGui::EndDisabled();
   }
-  Toggle("Color Cycle (Strobe)", &g_colorCycle);
-  Toggle("Spam Animations", &g_spamAnim);
   EndCard();
 
   Card("Teleport To Player");
@@ -1935,11 +2039,17 @@ static void TabTroll() {
   }
   EndCard();
 
-  Card("Character Trolls");
-  if (GlowBtn("Play Kill Anim", {160, 28}))
-    Game::PlayAnimation(2);
-  if (GlowBtn("Play Scan Anim", {160, 28}))
-    Game::PlayAnimation(1);
+  Card("Character Trolls (Host)");
+  {
+    if (!host)
+      ImGui::BeginDisabled();
+    if (GlowBtn("Play Kill Anim", {160, 28}))
+      Game::PlayAnimation(2);
+    if (GlowBtn("Play Scan Anim", {160, 28}))
+      Game::PlayAnimation(1);
+    if (!host)
+      ImGui::EndDisabled();
+  }
   EndCard();
 }
 
@@ -1988,18 +2098,28 @@ static void TabCosmetics() {
     Game::SetNamePlate(g_nameplate);
   EndCard();
 
-  Card("Color");
+  Card("Color (Host)");
   static int g_colorId = 0;
   const char *colors[] = {"Red",    "Blue",  "Green",  "Pink",   "Orange",
                           "Yellow", "Black", "White",  "Purple", "Brown",
                           "Cyan",   "Lime",  "Maroon", "Rose",   "Banana",
                           "Gray",   "Tan",   "Coral"};
-  if (Game::isInGame && Game::localColorId >= 0 && Game::localColorId < 18) {
-    ImGui::TextColored({.5f, .85f, 1, 1}, "Current Color: %s",
+  if ((Game::isInGame || Game::isInLobby) && Game::localColorId >= 0 &&
+      Game::localColorId < 18) {
+    ImGui::TextColored({.75f, .85f, 1, 1}, "Current Color: %s",
                        colors[Game::localColorId]);
   }
-  if (ImGui::Combo("Body Color##c", &g_colorId, colors, 18))
-    Game::SetPlayerColor(g_colorId);
+  {
+    bool host = Game::IsHost();
+    if (!host)
+      ImGui::BeginDisabled();
+    if (ImGui::Combo("Body Color##c", &g_colorId, colors, 18))
+      Game::SetPlayerColor(g_colorId);
+    if (!host)
+      ImGui::EndDisabled();
+    if (!host)
+      ImGui::TextColored({1, .85f, .3f, 1}, "Requires Host to change color.");
+  }
   EndCard();
 }
 
@@ -2013,7 +2133,6 @@ static void TabSettings() {
   EndCard();
   Card("Display");
   Toggle("FPS Counter", &g_fpsDisp);
-  Toggle("Developer Mode", &g_devMode);
   EndCard();
   Card("Config");
   if (GlowBtn("Save Config", {120, 28})) {

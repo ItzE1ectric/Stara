@@ -94,6 +94,7 @@ namespace Stara::Game {
     void SetKillCooldown(float time);
     void SetKillDistance(float dist);
     void SetWallhack(bool enabled);
+    void SetCameraZoom(float zoom);
     void SetHat(int hatId);
     void SetPet(int petId);
     void SetSkin(int skinId);
