@@ -633,11 +633,11 @@ static void UpdateInternal() {
     UnpatchAntiKick();
   }
 
-  // Determine isInGame: require AmongUsClient.Instance + GameState==Started + LocalPlayer.
-  // InnerNetClient.GameState at offset 0x64: 0=NotJoined, 1=Joined, 2=Started, 3=Ended
+  // Determine isInGame/isInLobby: require AmongUsClient.Instance + GameState + LocalPlayer.
+  // InnerNetClient.GameState at offset 0x64: 0=NotJoined, 1=Joined(lobby), 2=Started, 3=Ended
   {
     bool hasClient = false;
-    bool gameStarted = false;
+    int gameState = 0;
     if (AmongUsClient::klass) {
       void *field =
           il2cpp_class_get_field_from_name(AmongUsClient::klass, "Instance");
@@ -646,12 +646,12 @@ static void UpdateInternal() {
         il2cpp_field_static_get_value(field, &inst);
       if (IsValid(inst)) {
         hasClient = true;
-        int state = *(int *)((uintptr_t)inst + 0x64); // GameState
-        gameStarted = (state == 2); // Started
+        gameState = *(int *)((uintptr_t)inst + 0x64); // GameState
       }
     }
     void *lp = GetLocalPlayer();
-    isInGame = hasClient && gameStarted && IsValid(lp);
+    isInGame = hasClient && (gameState == 2) && IsValid(lp);  // Started
+    isInLobby = hasClient && (gameState == 1) && IsValid(lp); // Joined (lobby)
   }
 
   isInMeeting = false;
@@ -664,14 +664,15 @@ static void UpdateInternal() {
     isInMeeting = IsValid(meeting);
   }
 
-  if (!isInGame) {
+  if (!isInGame && !isInLobby) {
     players.clear();
     isInMeeting = false;
     return;
   }
 
-  // Update camera for ESP
-  UpdateCameraState();
+  // Update camera for ESP (in-game only)
+  if (isInGame)
+    UpdateCameraState();
 
   if (!get_playerName_method && GameData::klass) {
     get_playerName_method = il2cpp_class_get_method_from_name(
@@ -782,7 +783,9 @@ static void UpdateInternal() {
       }
     }
 
-    // ── New continuous toggle features ──
+    // ── Continuous toggle features (in-game only) ──
+    if (!isInGame) goto skip_ingame_toggles;
+
     // 1. No Kill Cooldown — constantly reset kill timer to 0
     if (g_noKillCd) {
       EnsurePlayerControlMethods();
@@ -803,9 +806,21 @@ static void UpdateInternal() {
     if (g_alwaysMoveable)
       *(bool *)((uintptr_t)lp + 0x38) = true; // moveable
 
-    // 4. Impostor Vision — force high light mod every frame
-    if (g_impostorVision)
-      SetFullbright(true);
+    // 4. Impostor Vision — set crew vision to impostor level via GameOptions
+    if (g_impostorVision && GameOptionsManager::klass) {
+      void *gomField = il2cpp_class_get_field_from_name(
+          GameOptionsManager::klass, "<Instance>k__BackingField");
+      void *gomInst = nullptr;
+      if (gomField)
+        il2cpp_field_static_get_value(gomField, &gomInst);
+      if (IsValid(gomInst)) {
+        void *opt = *(void **)((uintptr_t)gomInst + 0x18);
+        if (IsValid(opt)) {
+          float impVision = *(float *)((uintptr_t)opt + 0x20); // ImpostorLightMod
+          *(float *)((uintptr_t)opt + 0x1C) = impVision;       // CrewLightMod = ImpostorLightMod
+        }
+      }
+    }
 
     // 5. Max Report Distance — see/report bodies from anywhere
     if (g_maxReportDist)
@@ -857,6 +872,8 @@ static void UpdateInternal() {
         fn(lp, lp, 0, nullptr);
       }
     }
+
+    skip_ingame_toggles:;
   }
 
   if (PlayerControl::klass) {
@@ -1164,11 +1181,15 @@ void ForceEmergencyMeeting() {
     return;
 
   __try {
-    // Use CmdReportDeadBody(null) — works for both host and non-host.
-    // RpcStartMeeting only works reliably as host and can trigger anti-cheat.
-    auto CmdReportDeadBody =
-        (CmdReportDeadBody_fn)(gameAssembly + g_rvaCmdReportDeadBody);
-    CmdReportDeadBody(lp, nullptr, nullptr);
+    if (IsHost()) {
+      // Host: use RpcStartMeeting(null) — bypasses meeting checks
+      auto fn = (RpcStartMeeting_fn)(gameAssembly + g_rvaRpcStartMeeting);
+      fn(lp, nullptr, nullptr);
+    } else {
+      // Non-host: use CmdReportDeadBody(null) — normal report flow
+      auto fn = (CmdReportDeadBody_fn)(gameAssembly + g_rvaCmdReportDeadBody);
+      fn(lp, nullptr, nullptr);
+    }
   } __except (EXCEPTION_EXECUTE_HANDLER) {
     printf("[!] Stara: ForceEmergencyMeeting caught exception\n");
   }
@@ -1589,7 +1610,7 @@ void StartGame() {
   if (!gameAssembly || !AmongUsClient::klass)
     return;
   // MalumMenu: requires isHost && isLobby to force-start
-  if (!IsHost())
+  if (!IsHost() || !isInLobby)
     return;
   void *field =
       il2cpp_class_get_field_from_name(AmongUsClient::klass, "Instance");
@@ -1706,11 +1727,28 @@ static void *ResolveTargetPlayer(int playerSelector) {
 // Direct call: works regardless of host status, bypasses server authority.
 typedef void(__cdecl *RoleManager_SetRole_fn)(void *, void *, uint16_t, void *);
 
-// Get RoleManager.Instance via static field _instance (offset 0x0 in static
-// table)
+// Get RoleManager.Instance via get_Instance() method or _instance static field
 static void *GetRoleManager() {
   if (!RoleManager::klass)
     return nullptr;
+  // Try get_Instance method first (works reliably on DestroyableSingleton<T>)
+  static void *getInstance_method = nullptr;
+  static bool methodResolved = false;
+  if (!methodResolved) {
+    getInstance_method =
+        il2cpp_class_get_method_from_name(RoleManager::klass, "get_Instance", 0);
+    methodResolved = true;
+  }
+  if (getInstance_method) {
+    __try {
+      void *inst =
+          il2cpp_runtime_invoke(getInstance_method, nullptr, nullptr, nullptr);
+      if (IsValid(inst))
+        return inst;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+  }
+  // Fallback: try _instance static field directly
   void *field =
       il2cpp_class_get_field_from_name(RoleManager::klass, "_instance");
   if (!field)

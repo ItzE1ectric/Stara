@@ -922,7 +922,7 @@ static void DrawDiscordProfileCard() {
   DrawMiniIcon(dl, MiniIcon::Game, {p.x + 76.f, p.y + 58.f}, 14.f,
                IM_COL32(170, 220, 255, 220), 1.2f);
   ImGui::TextColored({0.92f, 0.95f, 1.f, 1.f}, "Game Now: %s",
-                     Game::isInGame ? "Among Us Match" : "Lobby / Idle");
+                     Game::isInGame ? "In Match" : (Game::isInLobby ? "In Lobby" : "Idle"));
 
   ImGui::SetCursorScreenPos({p.x + 68.f, p.y + 74.f});
   DrawMiniIcon(dl, MiniIcon::Database, {p.x + 76.f, p.y + 82.f}, 14.f,
@@ -1403,14 +1403,17 @@ static void TabPlayer() {
   Card("Lobby Actions");
   {
     bool host = Game::IsHost();
-    if (!host)
+    bool canStart = host && Game::isInLobby;
+    if (!canStart)
       ImGui::BeginDisabled();
     if (GlowBtn("Force Start Game (Host)", {200, 28}))
       Game::StartGame();
-    if (!host)
+    if (!canStart)
       ImGui::EndDisabled();
     if (!host)
       ImGui::TextColored({0.7f, 0.55f, 0.4f, 1}, "Start requires host");
+    else if (!Game::isInLobby)
+      ImGui::TextColored({0.7f, 0.55f, 0.4f, 1}, "Only works in lobby");
   }
   if (GlowBtn("Force End Game", {180, 28}))
     Game::EndGame();
@@ -2316,15 +2319,15 @@ void RenderMenu() {
     char chipGame[32];
     char chipPlayers[32];
     snprintf(chipGame, sizeof(chipGame), "Game: %s",
-             Game::isInGame ? "In Match" : "Lobby");
+             Game::isInGame ? "In Match" : (Game::isInLobby ? "Lobby" : "Idle"));
     snprintf(chipPlayers, sizeof(chipPlayers), "Players: %d",
              (int)Game::players.size());
     float chipX = wp.x + 250.f;
     float chipY = wp.y + 11.f;
     chipX += DrawStatusChip(dl, {chipX, chipY}, chipGame, Colors::TextPrimary,
-                            Game::isInGame ? IM_COL32(18, 72, 46, 200)
+                            (Game::isInGame || Game::isInLobby) ? IM_COL32(18, 72, 46, 200)
                                            : IM_COL32(60, 66, 92, 200),
-                            Game::isInGame ? IM_COL32(70, 170, 110, 170)
+                            (Game::isInGame || Game::isInLobby) ? IM_COL32(70, 170, 110, 170)
                                            : IM_COL32(96, 110, 156, 150));
     chipX += 8.f;
     chipX +=

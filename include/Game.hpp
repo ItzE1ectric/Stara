@@ -24,6 +24,7 @@ namespace Stara::Game {
     // Globals
     inline uintptr_t gameAssembly = 0;
     inline bool isInGame = false;
+    inline bool isInLobby = false;
     inline bool isInMeeting = false;
     inline float localX = 0, localY = 0;
     inline bool isImpostor = false;
