@@ -370,6 +370,8 @@ bool Init() {
       RoleBehaviour::klass = il2cpp_class_from_name(img, "", "RoleBehaviour");
     if (!MeetingHud::klass)
       MeetingHud::klass = il2cpp_class_from_name(img, "", "MeetingHud");
+    if (!Vent::klass)
+      Vent::klass = il2cpp_class_from_name(img, "", "Vent");
   }
 
   DumpDatabase::AutoLoad();
@@ -613,6 +615,71 @@ static int ReadColorId(void *pcObj) {
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
   return -1;
+}
+
+// Raw buffer for vent data (no C++ objects, safe for __try)
+static struct { int id; float x, y; } s_ventBuf[64];
+static int s_ventCount = 0;
+
+static void CollectVentPositionsRaw() {
+  s_ventCount = 0;
+  if (!isInGame || !ShipStatus::klass || !g_espVent)
+    return;
+  __try {
+    void *ssField =
+        il2cpp_class_get_field_from_name(ShipStatus::klass, "Instance");
+    void *ssInst = nullptr;
+    if (ssField)
+      il2cpp_field_static_get_value(ssField, &ssInst);
+    if (!IsValid(ssInst))
+      return;
+    void *ventArr = *(void **)((uintptr_t)ssInst + 0xB8);
+    if (!IsValid(ventArr))
+      return;
+    int len = *(int *)((uintptr_t)ventArr + 0x0C);
+    void **items = (void **)((uintptr_t)ventArr + 0x10);
+    static void *vent_get_transform = nullptr;
+    static void *get_pos = nullptr;
+    for (int i = 0; i < len && i < 64; i++) {
+      void *v = items[i];
+      if (!IsValid(v))
+        continue;
+      int ventId = *(int *)((uintptr_t)v + 0x10);
+      if (!vent_get_transform) {
+        void *vk = *(void **)v;
+        if (IsValid(vk))
+          vent_get_transform =
+              il2cpp_class_get_method_from_name(vk, "get_transform", 0);
+      }
+      if (!vent_get_transform)
+        continue;
+      void *tr =
+          il2cpp_runtime_invoke(vent_get_transform, v, nullptr, nullptr);
+      if (!IsValid(tr))
+        continue;
+      if (!get_pos && Transform::klass)
+        get_pos = il2cpp_class_get_method_from_name(Transform::klass,
+                                                    "get_position", 0);
+      if (!get_pos)
+        continue;
+      void *posBox = il2cpp_runtime_invoke(get_pos, tr, nullptr, nullptr);
+      if (IsValid(posBox)) {
+        float *xyz = (float *)((uintptr_t)posBox + sizeof(void *) * 2);
+        s_ventBuf[s_ventCount].id = ventId;
+        s_ventBuf[s_ventCount].x = xyz[0];
+        s_ventBuf[s_ventCount].y = xyz[1];
+        s_ventCount++;
+      }
+    }
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
+}
+
+static void CollectVentPositions() {
+  CollectVentPositionsRaw();
+  vents.clear();
+  for (int i = 0; i < s_ventCount; i++)
+    vents.push_back({s_ventBuf[i].id, s_ventBuf[i].x, s_ventBuf[i].y});
 }
 
 static void UpdateInternal() {
@@ -1024,6 +1091,9 @@ static void UpdateInternal() {
     }
   }
 
+  // Collect vent positions for Vent ESP (in separate function to allow __try)
+  CollectVentPositions();
+
   if (g_chatSpam) {
     static float lastSpam = 0;
     static int spamSeq = 1;
@@ -1360,9 +1430,22 @@ void SetHat(int hatId) {
   void *lp = GetLocalPlayer();
   if (!IsValid(lp) || !gameAssembly || !il2cpp_string_new)
     return;
-  const char *hatIds[] = {"hat_NoHat", "hat_crown", "hat_tophat", "hat_beanie",
-                          "hat_horns"};
-  if (hatId < 0 || hatId > 4)
+  const char *hatIds[] = {
+      "hat_NoHat",      "hat_crown",       "hat_tophat",
+      "hat_beanie",     "hat_horns",       "hat_flowerpot",
+      "hat_antenna",    "hat_balloon",     "hat_bird",
+      "hat_captain",    "hat_doubletop",   "hat_fez",
+      "hat_general",    "hat_goggles",     "hat_hard",
+      "hat_military",   "hat_paper",       "hat_party",
+      "hat_police",     "hat_stethoscope", "hat_stickynote",
+      "hat_viking",     "hat_wall",        "hat_snowman",
+      "hat_reindeer",   "hat_lights",      "hat_tree",
+      "hat_santa",      "hat_candy",       "hat_elf",
+      "hat_newYear2018","hat_whitehat",    "hat_wolf",
+      "hat_bush",       "hat_geoff",       "hat_traffic_purple",
+      "hat_holiday2018"};
+  constexpr int NUM_HATS = sizeof(hatIds) / sizeof(hatIds[0]);
+  if (hatId < 0 || hatId >= NUM_HATS)
     return;
   __try {
     auto fn = (RpcSetHat_fn)(gameAssembly + g_rvaRpcSetHat);
@@ -1376,9 +1459,16 @@ void SetPet(int petId) {
   void *lp = GetLocalPlayer();
   if (!IsValid(lp) || !gameAssembly || !il2cpp_string_new)
     return;
-  const char *petIds[] = {"pet_EmptyPet", "pet_Crewmate", "pet_Dog", "pet_Cat",
-                          "pet_Robot"};
-  if (petId < 0 || petId > 4)
+  const char *petIds[] = {
+      "pet_EmptyPet", "pet_Crewmate",  "pet_Dog",
+      "pet_Cat",      "pet_Robot",     "pet_Hamster",
+      "pet_UFO",      "pet_Ellie",     "pet_Squig",
+      "pet_Bedcrab",  "pet_Glitch",    "pet_Brainslug",
+      "pet_test",     "pet_Bush",      "pet_Lava",
+      "pet_Snow",     "pet_Charles",   "pet_ChewiePet",
+      "pet_Clank",    "pet_Frankendog"};
+  constexpr int NUM_PETS = sizeof(petIds) / sizeof(petIds[0]);
+  if (petId < 0 || petId >= NUM_PETS)
     return;
   __try {
     auto fn = (RpcSetPet_fn)(gameAssembly + g_rvaRpcSetPet);
@@ -1392,9 +1482,16 @@ void SetSkin(int skinId) {
   void *lp = GetLocalPlayer();
   if (!IsValid(lp) || !gameAssembly || !il2cpp_string_new)
     return;
-  const char *skinIds[] = {"skin_None", "skin_Suit", "skin_Astronaut",
-                           "skin_Military", "skin_Mech"};
-  if (skinId < 0 || skinId > 4)
+  const char *skinIds[] = {
+      "skin_None",      "skin_Suit",      "skin_Astronaut",
+      "skin_Military",  "skin_Mech",      "skin_Police",
+      "skin_Science",   "skin_SuitB",     "skin_Tarmac",
+      "skin_Capt",      "skin_Miner",     "skin_Winter",
+      "skin_Archae",    "skin_Security",  "skin_Hazmat",
+      "skin_Prisoner",  "skin_CCC",       "skin_Elf",
+      "skin_D2Normal",  "skin_Moose"};
+  constexpr int NUM_SKINS = sizeof(skinIds) / sizeof(skinIds[0]);
+  if (skinId < 0 || skinId >= NUM_SKINS)
     return;
   __try {
     auto fn = (RpcSetSkin_fn)(gameAssembly + g_rvaRpcSetSkin);
@@ -1607,6 +1704,30 @@ void DrawESP(ImDrawList *drawList) {
       ImVec2 bot = {screenW / 2.f, screenH};
       drawList->AddLine(bot, {sp.x, sp.y}, (col & 0x00FFFFFF) | 0x80000000,
                         1.2f);
+    }
+  }
+
+  // Vent ESP — draw vent positions with ID numbers
+  if (g_espVent) {
+    for (const auto &v : vents) {
+      ImVec2 vs = WorldToScreen(v.x, v.y);
+      if (vs.x < -100 || vs.x > screenW + 100 || vs.y < -100 ||
+          vs.y > screenH + 100)
+        continue;
+      // Vent diamond marker
+      float sz = 8.f;
+      ImU32 ventCol = IM_COL32(255, 160, 0, 220);
+      drawList->AddQuadFilled({vs.x, vs.y - sz}, {vs.x + sz, vs.y},
+                              {vs.x, vs.y + sz}, {vs.x - sz, vs.y}, ventCol);
+      drawList->AddQuad({vs.x, vs.y - sz}, {vs.x + sz, vs.y},
+                        {vs.x, vs.y + sz}, {vs.x - sz, vs.y},
+                        IM_COL32(0, 0, 0, 200), 1.5f);
+      // Vent ID label
+      char label[16];
+      snprintf(label, sizeof(label), "V%d", v.id);
+      ImVec2 ts = ImGui::CalcTextSize(label);
+      drawList->AddText({vs.x - ts.x * 0.5f, vs.y - sz - ts.y - 2.f},
+                        IM_COL32(255, 200, 60, 255), label);
     }
   }
 }

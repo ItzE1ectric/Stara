@@ -60,7 +60,8 @@ float g_killCd = 0.f, g_killDist = 1.0f;
 bool g_fullbright = false, g_wireframe = false, g_smoothMove = true,
      g_wallhack = false;
 bool g_espBox = true, g_espName = true, g_espDist = true, g_espRole = true;
-bool g_espTracer = false, g_espOutline = true, g_espTask = false;
+bool g_espTracer = false, g_espOutline = true, g_espTask = false,
+     g_espVent = true;
 bool g_rainbow = false, g_spin = false, g_tiny = false, g_giant = false;
 bool g_dance = false, g_particle = false, g_autoPath = false;
 bool g_noclip = false, g_chatSpam = false;
@@ -1618,6 +1619,13 @@ static void TabESP() {
   Toggle("Task Markers", &g_espTask);
   EndCard();
 
+  Card("Vent ESP");
+  Toggle("Show Vents", &g_espVent);
+  if (g_espVent)
+    ImGui::TextColored({1.f, .75f, .2f, 1},
+                       "Orange diamonds with vent IDs shown on map.");
+  EndCard();
+
   // ESP preview panel
   Card("##espPreview");
   ImDrawList *dl = ImGui::GetWindowDrawList();
@@ -2078,17 +2086,40 @@ static void TabCosmetics() {
   ImGui::Dummy({120, 100});
   EndCard();
   Card("Cosmetics");
-  const char *hats[] = {"None", "Crown", "Top Hat", "Beanie", "Horns"};
-  const char *pets[] = {"None", "Mini Crewmate", "Dog", "Cat", "Robot"};
-  const char *skins[] = {"None", "Suit", "Astronaut", "Military", "Mech"};
+  const char *hats[] = {
+      "None",        "Crown",       "Top Hat",      "Beanie",
+      "Horns",       "Flowerpot",   "Antenna",      "Balloon",
+      "Bird",        "Captain",     "Double Top",   "Fez",
+      "General",     "Goggles",     "Hard Hat",     "Military",
+      "Paper",       "Party Hat",   "Police",       "Stethoscope",
+      "Sticky Note", "Viking",      "Wall",         "Snowman",
+      "Reindeer",    "Lights",      "Tree",         "Santa",
+      "Candy",       "Elf Hat",     "New Year 2018","White Hat",
+      "Wolf",        "Bush",        "Geoff",        "Purple Traffic",
+      "Holiday 2018"};
+  constexpr int NUM_HATS = sizeof(hats) / sizeof(hats[0]);
+  const char *pets[] = {
+      "None",        "Mini Crewmate","Dog",          "Cat",
+      "Robot",       "Hamster",     "UFO",          "Ellie",
+      "Squig",       "Bedcrab",     "Glitch",       "Brainslug",
+      "Test",        "Bush",        "Lava",         "Snow",
+      "Charles",     "Chewie",      "Clank",        "Frankendog"};
+  constexpr int NUM_PETS = sizeof(pets) / sizeof(pets[0]);
+  const char *skins[] = {
+      "None",        "Suit",        "Astronaut",    "Military",
+      "Mech",        "Police",      "Science",      "Suit B",
+      "Tarmac",      "Captain",     "Miner",        "Winter",
+      "Archaeologist","Security",   "Hazmat",       "Prisoner",
+      "CCC",         "Elf",         "D2 Normal",    "Moose"};
+  constexpr int NUM_SKINS = sizeof(skins) / sizeof(skins[0]);
   const char *visors[] = {"None", "Lollipop (Crew)", "Lollipop (Imp)",
                           "Star (Crew)", "Angery"};
   const char *nameplates[] = {"None", "Toppat", "CCC", "Government", "Yard"};
-  if (ImGui::Combo("Hat##c", &g_hat, hats, 5))
+  if (ImGui::Combo("Hat##c", &g_hat, hats, NUM_HATS))
     Game::SetHat(g_hat);
-  if (ImGui::Combo("Pet##c", &g_pet, pets, 5))
+  if (ImGui::Combo("Pet##c", &g_pet, pets, NUM_PETS))
     Game::SetPet(g_pet);
-  if (ImGui::Combo("Skin##c", &g_skin, skins, 5))
+  if (ImGui::Combo("Skin##c", &g_skin, skins, NUM_SKINS))
     Game::SetSkin(g_skin);
   static int g_visor = 0;
   if (ImGui::Combo("Visor##c", &g_visor, visors, 5))

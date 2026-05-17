@@ -46,6 +46,12 @@ namespace Stara::Game {
 
     inline std::vector<PlayerInfo> players;
 
+    struct VentInfo {
+        int id;
+        float x, y;
+    };
+    inline std::vector<VentInfo> vents;
+
     // IL2CPP Functions
     inline il2cpp_domain_get_t il2cpp_domain_get;
     inline il2cpp_domain_get_assemblies_t il2cpp_domain_get_assemblies;
@@ -76,6 +82,7 @@ namespace Stara::Game {
     namespace RoleManager { inline void* klass = nullptr; }
     namespace RoleBehaviour { inline void* klass = nullptr; }
     namespace MeetingHud { inline void* klass = nullptr; }
+    namespace Vent { inline void* klass = nullptr; }
 
     // Core Functions
     bool Init();
