@@ -1022,6 +1022,72 @@ static void UpdateInternal() {
         }
       }
 
+      // 15. Role-specific cheats — access role object via Data->Role (0x4C)
+      {
+        void *data = *(void **)((uintptr_t)lp + 0x58);
+        if (IsValid(data)) {
+          void *roleObj = *(void **)((uintptr_t)data + 0x4C);
+          uint16_t roleType = *(uint16_t *)((uintptr_t)data + 0x38);
+          if (IsValid(roleObj)) {
+            // Engineer (roleType 3): inVentTimeRemaining=0x80, cooldownSecondsRemaining=0x7C
+            if (roleType == 3) {
+              if (g_endlessVentTime)
+                *(float *)((uintptr_t)roleObj + 0x80) = 9999.f;
+              if (g_noVentCooldown) {
+                float cd = *(float *)((uintptr_t)roleObj + 0x7C);
+                if (cd > 0.f) *(float *)((uintptr_t)roleObj + 0x7C) = 0.f;
+              }
+            }
+            // Scientist (roleType 2): currentCharge=0x80, currentCooldown=0x84
+            if (roleType == 2) {
+              if (g_endlessBattery)
+                *(float *)((uintptr_t)roleObj + 0x80) = 9999.f;
+              if (g_noVitalsCooldown) {
+                float cd = *(float *)((uintptr_t)roleObj + 0x84);
+                if (cd > 0.f) *(float *)((uintptr_t)roleObj + 0x84) = 0.f;
+              }
+            }
+            // Tracker (roleType 10): cooldownSecondsRemaining=0x7C, durationSecondsRemaining=0x80, delaySecondsRemaining=0x84
+            if (roleType == 10) {
+              if (g_endlessTracking)
+                *(float *)((uintptr_t)roleObj + 0x80) = 9999.f;
+              if (g_noTrackDelay)
+                *(float *)((uintptr_t)roleObj + 0x84) = 0.f;
+              if (g_noTrackCooldown) {
+                float cd = *(float *)((uintptr_t)roleObj + 0x7C);
+                if (cd > 0.f) *(float *)((uintptr_t)roleObj + 0x7C) = 0.f;
+              }
+            }
+            // Shapeshifter (roleType 5): cooldownSecondsRemaining=0x8C, durationSecondsRemaining=0x90
+            if (roleType == 5) {
+              if (g_endlessSsDuration)
+                *(float *)((uintptr_t)roleObj + 0x90) = 9999.f;
+              if (g_noSsAnimation) {
+                float cd = *(float *)((uintptr_t)roleObj + 0x8C);
+                if (cd > 0.f) *(float *)((uintptr_t)roleObj + 0x8C) = 0.f;
+              }
+            }
+            // Phantom (roleType 9): cooldownSecondsRemaining=0x7C, durationSecondsRemaining=0x80
+            if (roleType == 9) {
+              if (g_killWhileVanished) {
+                // Keep cooldown at 0 so kill button is always active
+                *(float *)((uintptr_t)lp + 0x80) = 0.f; // killTimer
+              }
+            }
+          }
+        }
+      }
+
+      // 16. Unfixable Lights — constantly re-trigger lights sabotage
+      if (g_unfixableLights && ShipStatus::klass && gameAssembly) {
+        static float ulTimer = 0;
+        ulTimer += 0.033f;
+        if (ulTimer > 1.0f) {
+          ulTimer = 0;
+          TriggerSabotage(7); // Electrical / Lights
+        }
+      }
+
     } // end isInGame toggles
   }
 

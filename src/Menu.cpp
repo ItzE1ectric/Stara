@@ -80,6 +80,14 @@ bool g_antiKick = false, g_forceProtect = false, g_spamAnim = false,
 bool g_walkInVents = false, g_useVents = false, g_seeGhosts = false,
      g_alwaysChat = false;
 bool g_killReach = false, g_killAnyone = false;
+// Role-specific cheats
+bool g_endlessVentTime = false, g_noVentCooldown = false;
+bool g_endlessBattery = false, g_noVitalsCooldown = false;
+bool g_endlessTracking = false, g_noTrackDelay = false,
+     g_noTrackCooldown = false;
+bool g_noSsAnimation = false, g_endlessSsDuration = false;
+bool g_killWhileVanished = false;
+bool g_unfixableLights = false;
 float g_customDiscussTime = 15.f, g_customVoteTime = 120.f;
 char g_chatBuf[128] = "Stara Client";
 static float g_hue = 0.f;
@@ -1734,6 +1742,33 @@ static void TabTroll() {
   ImGui::SameLine();
   if (GlowBtn("Appear", {100, 28}))
     Game::Appear();
+  Toggle("Kill While Vanished", &g_killWhileVanished);
+  EndCard();
+
+  Card("Shapeshifter");
+  Toggle("No Shapeshift Animation", &g_noSsAnimation);
+  Toggle("Endless Shapeshift Duration", &g_endlessSsDuration);
+  EndCard();
+
+  Card("Engineer");
+  Toggle("Endless Vent Time", &g_endlessVentTime);
+  Toggle("No Vent Cooldown", &g_noVentCooldown);
+  EndCard();
+
+  Card("Scientist");
+  Toggle("Endless Battery", &g_endlessBattery);
+  Toggle("No Vitals Cooldown", &g_noVitalsCooldown);
+  EndCard();
+
+  Card("Tracker");
+  Toggle("Endless Tracking", &g_endlessTracking);
+  Toggle("No Track Delay", &g_noTrackDelay);
+  Toggle("No Track Cooldown", &g_noTrackCooldown);
+  EndCard();
+
+  Card("Ship");
+  Toggle("Unfixable Lights", &g_unfixableLights);
+  ImGui::TextColored({0.5f, 0.8f, 1, 1}, "Lights cannot be fixed while enabled");
   EndCard();
 
   Card("Shapeshift (Host)");

@@ -123,6 +123,13 @@ extern bool g_maxReportDist, g_autoTasks, g_freezeAll, g_colorCycle;
 extern bool g_antiKick, g_forceProtect, g_spamAnim, g_godmode;
 extern bool g_walkInVents, g_useVents, g_seeGhosts, g_alwaysChat;
 extern bool g_killReach, g_killAnyone;
+// Role-specific cheats
+extern bool g_endlessVentTime, g_noVentCooldown;       // Engineer
+extern bool g_endlessBattery, g_noVitalsCooldown;       // Scientist
+extern bool g_endlessTracking, g_noTrackDelay, g_noTrackCooldown; // Tracker
+extern bool g_noSsAnimation, g_endlessSsDuration;       // Shapeshifter
+extern bool g_killWhileVanished;                        // Phantom
+extern bool g_unfixableLights;                          // Ship
 extern float g_customDiscussTime, g_customVoteTime;
 extern char g_chatBuf[128];
 
