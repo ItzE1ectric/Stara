@@ -836,6 +836,35 @@ static void UpdateInternal() {
       freecamInit = false;
   }
 
+  // Teleport to Cursor — right-click to teleport (screen-to-world)
+  if (isInGame && g_teleportToCursor) {
+    static bool wasDown = false;
+    bool isDown = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
+    if (isDown && !wasDown) {
+      POINT cursor;
+      GetCursorPos(&cursor);
+      // Convert screen coords to world coords (reverse of WorldToScreen)
+      float screenW = ImGui::GetIO().DisplaySize.x;
+      float screenH = ImGui::GetIO().DisplaySize.y;
+      // Adjust for window position
+      HWND hwnd = FindWindowA("UnityWndClass", NULL);
+      if (hwnd) ScreenToClient(hwnd, &cursor);
+      float ppu = screenH / (2.f * orthoSize);
+      float worldX = camX + ((float)cursor.x - screenW / 2.f) / ppu;
+      float worldY = camY - ((float)cursor.y - screenH / 2.f) / ppu;
+      // Teleport local player
+      void *tlp = GetLocalPlayer();
+      if (IsValid(tlp)) {
+        void *tnt = *(void **)((uintptr_t)tlp + 0x98);
+        if (IsValid(tnt)) {
+          *(float *)((uintptr_t)tnt + 0x44) = worldX;
+          *(float *)((uintptr_t)tnt + 0x48) = worldY;
+        }
+      }
+    }
+    wasDown = isDown;
+  }
+
   if (!get_playerName_method && GameData::klass) {
     get_playerName_method = il2cpp_class_get_method_from_name(
         NetworkedPlayerInfo::klass, "get_PlayerName", 0);

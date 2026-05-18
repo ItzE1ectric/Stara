@@ -92,7 +92,7 @@ bool g_unfixableLights = false;
 bool g_tracerCrew = false, g_tracerImp = false, g_tracerGhost = false,
      g_tracerBodies = false, g_tracerColorBased = false;
 // Camera
-bool g_freecam = false, g_spectate = false;
+bool g_freecam = false, g_spectate = false, g_teleportToCursor = false;
 int g_spectateTarget = -1;
 float g_customDiscussTime = 15.f, g_customVoteTime = 120.f;
 char g_chatBuf[128] = "Stara Client";
@@ -1642,6 +1642,8 @@ static void TabESP() {
   EndCard();
 
   Card("Camera");
+  Toggle("Teleport to Cursor", &g_teleportToCursor);
+  ImGui::TextColored({0.5f, 0.8f, 1, 1}, "Right-click to teleport. Best with Zoom Out");
   Toggle("Freecam", &g_freecam);
   ImGui::TextColored({0.5f, 0.8f, 1, 1}, "WASD/Arrows to move camera freely");
   if (g_freecam && g_spectate) g_spectate = false;

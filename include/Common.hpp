@@ -134,7 +134,7 @@ extern bool g_unfixableLights;                          // Ship
 extern bool g_tracerCrew, g_tracerImp, g_tracerGhost, g_tracerBodies,
     g_tracerColorBased;
 // Camera
-extern bool g_freecam, g_spectate;
+extern bool g_freecam, g_spectate, g_teleportToCursor;
 extern int g_spectateTarget;
 extern float g_customDiscussTime, g_customVoteTime;
 extern char g_chatBuf[128];
