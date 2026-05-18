@@ -480,7 +480,8 @@ static void *pc_getTruePosition_method = nullptr;
 static void *rb_getIsImpostor_method = nullptr;
 static std::unordered_map<int, float> g_frozenPlayerSpeeds;
 static bool g_freezeWasActive = false;
-static void ApplyRoleToPlayer(void *targetPc, int roleType);
+static void SetFakeRoleLocal(void *targetPc, int roleType);
+static void ForceRoleNetwork(void *targetPc, int roleType);
 static void RevivePlayerControl(void *playerControl, bool syncRole);
 
 static void EnsurePlayerControlMethods() {
@@ -843,36 +844,28 @@ static void UpdateInternal() {
       static int h = 0;
       h = (h + 1) % 18;
       if (gameAssembly) {
-        SpoofHost();
         auto fn = (RpcSetColor_fn)(gameAssembly + g_rvaRpcSetColor);
         fn(lp, (uint8_t)h, nullptr);
-        RestoreHost();
       }
     }
 
     if (g_spin && gameAssembly && CanSendRpc()) {
-      SpoofHost();
       auto fn = (RpcPlayAnimation_fn)(gameAssembly + g_rvaRpcPlayAnimation);
       fn(lp, 2, nullptr);
-      RestoreHost();
     }
 
     if (g_dance && gameAssembly && CanSendRpc()) {
-      SpoofHost();
       static uint8_t danceAnim = 0;
       auto fn = (RpcPlayAnimation_fn)(gameAssembly + g_rvaRpcPlayAnimation);
       fn(lp, danceAnim, nullptr);
       danceAnim = (uint8_t)((danceAnim + 1) % 3);
-      RestoreHost();
     }
 
     if (g_particle && gameAssembly && CanSendCosmeticRpc()) {
-      SpoofHost();
       static int particleHue = 0;
       particleHue = (particleHue + 1) % 18;
       auto fn = (RpcSetColor_fn)(gameAssembly + g_rvaRpcSetColor);
       fn(lp, (uint8_t)particleHue, nullptr);
-      RestoreHost();
     }
 
     {
@@ -960,21 +953,17 @@ static void UpdateInternal() {
 
       // 7. Color Cycle
       if (g_colorCycle && CanSendCosmeticRpc() && gameAssembly) {
-        SpoofHost();
         static int cc = 0;
         cc = (cc + 1) % 18;
         auto fn = (RpcSetColor_fn)(gameAssembly + g_rvaRpcSetColor);
         fn(lp, (uint8_t)cc, nullptr);
-        RestoreHost();
       }
 
       // 8. Spam Animation
       if (g_spamAnim && gameAssembly && CanSendRpc()) {
-        SpoofHost();
         auto fn =
             (RpcPlayAnimation_fn)(gameAssembly + g_rvaRpcPlayAnimation);
         fn(lp, (uint8_t)(rand() % 3), nullptr);
-        RestoreHost();
       }
 
       // 9. Auto Tasks — complete tasks every 5 seconds
@@ -1325,13 +1314,11 @@ void SetPlayerColor(int colorId) {
   void *lp = GetLocalPlayer();
   if (!IsValid(lp) || !gameAssembly)
     return;
-  SpoofHost();
   __try {
     auto fn = (RpcSetColor_fn)(gameAssembly + g_rvaRpcSetColor);
     fn(lp, (uint8_t)colorId, nullptr);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
-  RestoreHost();
 }
 
 void TeleportTo(float x, float y) {
@@ -1489,13 +1476,11 @@ void SetHat(int hatId) {
   constexpr int NUM_HATS = sizeof(hatIds) / sizeof(hatIds[0]);
   if (hatId < 0 || hatId >= NUM_HATS)
     return;
-  SpoofHost();
   __try {
     auto fn = (RpcSetHat_fn)(gameAssembly + g_rvaRpcSetHat);
     fn(lp, il2cpp_string_new(hatIds[hatId]), nullptr);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
-  RestoreHost();
 }
 
 void SetPet(int petId) {
@@ -1514,13 +1499,11 @@ void SetPet(int petId) {
   constexpr int NUM_PETS = sizeof(petIds) / sizeof(petIds[0]);
   if (petId < 0 || petId >= NUM_PETS)
     return;
-  SpoofHost();
   __try {
     auto fn = (RpcSetPet_fn)(gameAssembly + g_rvaRpcSetPet);
     fn(lp, il2cpp_string_new(petIds[petId]), nullptr);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
-  RestoreHost();
 }
 
 void SetSkin(int skinId) {
@@ -1539,13 +1522,11 @@ void SetSkin(int skinId) {
   constexpr int NUM_SKINS = sizeof(skinIds) / sizeof(skinIds[0]);
   if (skinId < 0 || skinId >= NUM_SKINS)
     return;
-  SpoofHost();
   __try {
     auto fn = (RpcSetSkin_fn)(gameAssembly + g_rvaRpcSetSkin);
     fn(lp, il2cpp_string_new(skinIds[skinId]), nullptr);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
-  RestoreHost();
 }
 
 void SetCharacterScale(float scale) {
@@ -2001,20 +1982,20 @@ static uint16_t ResolveAliveRoleType(void *cachedPlayerData) {
   return currentRole;
 }
 
-// Apply role both client-side (memory) and server-side (RoleManager + Rpc)
-static void ApplyRoleToPlayer(void *targetPc, int roleType) {
+// Set Fake Role: LOCAL ONLY (MalumMenu-style)
+// Changes your role client-side giving you abilities (vent, kill button, etc.)
+// Does NOT broadcast to other players — no kick risk.
+static void SetFakeRoleLocal(void *targetPc, int roleType) {
   if (!IsValid(targetPc) || !gameAssembly)
     return;
 
-  // 1. Client-side: write roleType directly into CachedPlayerData.Role (offset
-  // 0x38)
-  void *data = *(void **)((uintptr_t)targetPc + 0x58); // CachedPlayerData
+  // 1. Write roleType into CachedPlayerData.Role (offset 0x38)
+  void *data = *(void **)((uintptr_t)targetPc + 0x58);
   if (IsValid(data))
     *(uint16_t *)((uintptr_t)data + 0x38) = (uint16_t)roleType;
 
-  // 2. Server-side: RoleManager.SetRole(playerControl, roleType)
-  //    This is the INTERNAL game method — no host check, applies the actual
-  //    RoleBehaviour component and syncs state locally.
+  // 2. RoleManager.SetRole — applies RoleBehaviour component locally
+  //    This gives you the actual role abilities (kill button, vent, etc.)
   void *rm = GetRoleManager();
   if (IsValid(rm)) {
     __try {
@@ -2024,8 +2005,18 @@ static void ApplyRoleToPlayer(void *targetPc, int roleType) {
     } __except (EXCEPTION_EXECUTE_HANDLER) {
     }
   }
+}
 
-  // 3. Network: RpcSetRole broadcasts to all clients
+// Force Role: NETWORK (host-only, will kick non-host)
+// Broadcasts RpcSetRole so ALL players see the role change.
+static void ForceRoleNetwork(void *targetPc, int roleType) {
+  if (!IsValid(targetPc) || !gameAssembly)
+    return;
+
+  // Apply locally first
+  SetFakeRoleLocal(targetPc, roleType);
+
+  // Then broadcast via RPC (host-only — server validates sender is host)
   SpoofHost();
   __try {
     auto fn = (RpcSetRole_fn)(gameAssembly + g_rvaRpcSetRole);
@@ -2057,7 +2048,7 @@ static void RevivePlayerControl(void *playerControl, bool syncRole) {
 
     if (aliveRole != currentRole) {
       if (syncRole)
-        ApplyRoleToPlayer(playerControl, (int)aliveRole);
+        SetFakeRoleLocal(playerControl, (int)aliveRole);
       else
         *(uint16_t *)((uintptr_t)data + 0x38) = aliveRole;
     }
@@ -2080,7 +2071,8 @@ void SetRole(int roleType) {
   void *lp = GetLocalPlayer();
   if (!IsValid(lp))
     return;
-  ApplyRoleToPlayer(lp, roleType);
+  // LOCAL ONLY — gives you abilities without telling the server (no kick)
+  SetFakeRoleLocal(lp, roleType);
   isImpostor =
       (roleType == 1 || roleType == 5 || roleType == 7 || roleType == 9 || roleType == 18);
 }
@@ -2090,7 +2082,8 @@ void SetPlayerRole(int playerIndex, int roleType) {
   void *target = ResolveTargetPlayer(playerIndex);
   if (!IsValid(target))
     return;
-  ApplyRoleToPlayer(target, roleType);
+  // NETWORK — host-only, will kick non-host
+  ForceRoleNetwork(target, roleType);
 }
 
 // MurderPlayer RVA: 0x5C5D70  (direct kill, no role check)
@@ -2191,13 +2184,11 @@ void SetVisor(int visorId) {
                        "visor_pk01_AngeryVisor"};
   if (visorId < 0 || visorId > 4)
     return;
-  SpoofHost();
   __try {
     auto fn = (RpcSetVisor_fn)(gameAssembly + g_rvaRpcSetVisor);
     fn(lp, il2cpp_string_new(ids[visorId]), nullptr);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
-  RestoreHost();
 }
 
 // RpcSetNamePlate RVA: 0x5C96C0
@@ -2212,13 +2203,11 @@ void SetNamePlate(int npId) {
                        "nameplate_is_yard"};
   if (npId < 0 || npId > 4)
     return;
-  SpoofHost();
   __try {
     auto fn = (RpcSetNamePlate_fn)(gameAssembly + g_rvaRpcSetNamePlate);
     fn(lp, il2cpp_string_new(ids[npId]), nullptr);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
-  RestoreHost();
 }
 
 // RpcSetLevel RVA: 0x5C9620
@@ -2319,13 +2308,11 @@ void EnterVent(int ventId) {
   void *phys = *(void **)((uintptr_t)lp + 0x94); // MyPhysics (PlayerPhysics)
   if (!IsValid(phys))
     return;
-  SpoofHost();
   __try {
     auto fn = (RpcVent_fn)(gameAssembly + g_rvaRpcEnterVent);
     fn(phys, ventId, nullptr);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
-  RestoreHost();
 }
 
 void ExitVent(int ventId) {
@@ -2336,13 +2323,11 @@ void ExitVent(int ventId) {
   void *phys = *(void **)((uintptr_t)lp + 0x94);
   if (!IsValid(phys))
     return;
-  SpoofHost();
   __try {
     auto fn = (RpcVent_fn)(gameAssembly + g_rvaRpcExitVent);
     fn(phys, ventId, nullptr);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
-  RestoreHost();
 }
 
 // RpcCloseDoorsOfType RVA: 0x637E00
@@ -2357,13 +2342,11 @@ void CloseDoors(int roomType) {
     il2cpp_field_static_get_value(field, &inst);
   if (!IsValid(inst))
     return;
-  SpoofHost();
   __try {
     auto fn = (RpcCloseDoors_fn)(gameAssembly + g_rvaRpcCloseDoorsOfType);
     fn(inst, roomType, nullptr);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
-  RestoreHost();
 }
 
 // RpcUpdateSystem RVA: 0x637EB0
@@ -2378,14 +2361,12 @@ void RepairSabotage(int systemType) {
     il2cpp_field_static_get_value(field, &inst);
   if (!IsValid(inst))
     return;
-  SpoofHost();
   __try {
     // amount = 128 fixes most sabotages
     auto fn = (RpcUpdateSystem_fn)(gameAssembly + g_rvaRpcUpdateSystem);
     fn(inst, systemType, 128, nullptr);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
-  RestoreHost();
 }
 
 void TeleportToPlayer(int playerIndex) {

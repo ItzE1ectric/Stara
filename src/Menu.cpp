@@ -1423,9 +1423,10 @@ static void TabPlayer() {
                          "Phantom",        "Tracker",        "Detective",
                          "Viper"};
   const int roleIds[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 18};
-  ImGui::Combo("Set Role##r", &selRole, roles, 13);
-  if (GlowBtn("Apply Role", {140, 28}))
+  ImGui::Combo("Set Fake Role##r", &selRole, roles, 13);
+  if (GlowBtn("Apply Fake Role", {140, 28}))
     Game::SetRole(roleIds[selRole]);
+  ImGui::TextColored({0.5f, 0.8f, 1, 1}, "Local only - gives you abilities (no kick)");
   ImGui::SameLine();
   bool canRevive = Game::isInGame && !Game::isInMeeting;
   if (!canRevive)
@@ -1441,7 +1442,7 @@ static void TabPlayer() {
                        "Revive disabled during meeting/lobby for stability");
   EndCard();
 
-  Card("Lobby Actions");
+  Card("Lobby Actions (Host)");
   if (GlowBtn("Force Start Game", {200, 28}))
     Game::StartGame();
   if (GlowBtn("Force End Game", {180, 28}))
@@ -1473,7 +1474,7 @@ static void TabPlayer() {
   Toggle("Max Report Distance", &g_maxReportDist);
   Toggle("Auto Complete Tasks", &g_autoTasks);
   Toggle("Anti-Kick (Safe Mode)", &g_antiKick);
-  Toggle("Force Shield (GA)", &g_forceProtect);
+  Toggle("Force Shield (GA) (Host)", &g_forceProtect);
   Toggle("Freeze All Players", &g_freezeAll);
   EndCard();
 
@@ -1497,7 +1498,7 @@ static void TabPlayer() {
   Toggle("Auto Spam Chat", &g_chatSpam);
   EndCard();
 
-  Card("Kill Players");
+  Card("Kill Players (Host)");
   if (!Game::isInGame) {
     ImGui::TextColored({1, 0.3f, 0.3f, 1}, "Not in game");
   } else {
@@ -1702,9 +1703,9 @@ static void TabFun() {
 static void TabTroll() {
   Card("Server Trolls");
   Toggle("Chat Spam", &g_chatSpam);
-  if (GlowBtn("Force Emergency Meeting", {200, 28}))
+  if (GlowBtn("Force Emergency Meeting (Host)", {230, 28}))
     Game::ForceEmergencyMeeting();
-  if (GlowBtn("Force Start Game", {200, 28}))
+  if (GlowBtn("Force Start Game (Host)", {220, 28}))
     Game::StartGame();
   if (GlowBtn("Force End / Leave", {200, 28}))
     Game::EndGame();
@@ -1712,7 +1713,7 @@ static void TabTroll() {
     Game::CompleteAllTasks();
   EndCard();
 
-  Card("Impostor Abilities");
+  Card("Impostor Abilities (Host)");
   if (GlowBtn("Vanish (Phantom)", {160, 28}))
     Game::Vanish();
   ImGui::SameLine();
@@ -1720,7 +1721,7 @@ static void TabTroll() {
     Game::Appear();
   EndCard();
 
-  Card("Shapeshift");
+  Card("Shapeshift (Host)");
   if (!Game::isInGame) {
     ImGui::TextColored({1, 0.3f, 0.3f, 1}, "Not in game");
   } else {
@@ -1736,7 +1737,7 @@ static void TabTroll() {
   }
   EndCard();
 
-  Card("Set Player Roles");
+  Card("Set Player Roles (Host = Network, Self = Local)");
   if (!Game::isInGame) {
     ImGui::TextColored({1, 0.3f, 0.3f, 1}, "Not in game");
   } else {
@@ -1787,7 +1788,7 @@ static void TabTroll() {
     // Set ALL players to a role at once
     static int massRole = 1;
     ImGui::Combo("Mass Role##mr", &massRole, roleNames, NUM_ROLES);
-    if (GlowBtn("Set ALL to Role", {180, 28})) {
+    if (GlowBtn("Set ALL to Role (Host)", {200, 28})) {
       for (int i = 0; i < (int)Game::players.size(); i++)
         Game::SetPlayerRole(Game::players[i].playerId, roleIds[massRole]);
       // Also set self
@@ -1795,8 +1796,8 @@ static void TabTroll() {
     }
     ImGui::Separator();
 
-    // Self role
-    ImGui::TextColored({0, 0.86f, 1, 1}, "You:");
+    // Self role (local only — safe for non-host)
+    ImGui::TextColored({0, 0.86f, 1, 1}, "You (Fake Role):");
     ImGui::SameLine();
     ImGui::SetNextItemWidth(140);
     ImGui::Combo("##selfRole", &selfRole, roleNames, NUM_ROLES);
@@ -1805,7 +1806,7 @@ static void TabTroll() {
       Game::SetRole(roleIds[selfRole]);
 
     ImGui::Separator();
-    ImGui::TextColored({0.6f, 0.6f, 0.75f, 1}, "Other Players:");
+    ImGui::TextColored({0.6f, 0.6f, 0.75f, 1}, "Other Players (Host Only):");
 
     for (int i = 0; i < (int)Game::players.size() && i < 15; i++) {
       const auto &p = Game::players[i];
@@ -1924,7 +1925,7 @@ static void TabTroll() {
   EndCard();
 
   Card("Mass Actions");
-  if (GlowBtn("Teleport ALL to Self", {220, 28}))
+  if (GlowBtn("Teleport ALL to Self (Host)", {240, 28}))
     Game::TeleportAllToSelf();
   Toggle("Color Cycle (Strobe)", &g_colorCycle);
   Toggle("Spam Animations", &g_spamAnim);
