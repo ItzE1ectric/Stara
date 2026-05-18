@@ -42,6 +42,7 @@ namespace Stara::Game {
         bool isDead;
         float distance;
         std::string roleName;
+        int colorId;
     };
 
     inline std::vector<PlayerInfo> players;

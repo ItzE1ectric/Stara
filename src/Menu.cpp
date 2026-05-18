@@ -88,6 +88,12 @@ bool g_endlessTracking = false, g_noTrackDelay = false,
 bool g_noSsAnimation = false, g_endlessSsDuration = false;
 bool g_killWhileVanished = false;
 bool g_unfixableLights = false;
+// Tracers
+bool g_tracerCrew = false, g_tracerImp = false, g_tracerGhost = false,
+     g_tracerBodies = false, g_tracerColorBased = false;
+// Camera
+bool g_freecam = false, g_spectate = false;
+int g_spectateTarget = -1;
 float g_customDiscussTime = 15.f, g_customVoteTime = 120.f;
 char g_chatBuf[128] = "Stara Client";
 static float g_hue = 0.f;
@@ -1621,9 +1627,38 @@ static void TabESP() {
   EndCard();
 
   Card("Visuals");
-  Toggle("Tracer Lines", &g_espTracer);
+  Toggle("Tracer Lines (All)", &g_espTracer);
   Toggle("Outline", &g_espOutline);
   Toggle("Task Markers", &g_espTask);
+  EndCard();
+
+  Card("Tracers");
+  Toggle("Crewmates (Cyan)", &g_tracerCrew);
+  Toggle("Impostors (Red)", &g_tracerImp);
+  Toggle("Ghosts (White)", &g_tracerGhost);
+  Toggle("Dead Bodies (Yellow)", &g_tracerBodies);
+  Toggle("Color-based", &g_tracerColorBased);
+  ImGui::TextColored({0.5f, 0.8f, 1, 1}, "Changes tracer color to player color");
+  EndCard();
+
+  Card("Camera");
+  Toggle("Freecam", &g_freecam);
+  ImGui::TextColored({0.5f, 0.8f, 1, 1}, "WASD/Arrows to move camera freely");
+  if (g_freecam && g_spectate) g_spectate = false;
+  if (Toggle("Spectate", &g_spectate) && g_spectate) g_freecam = false;
+  if (g_spectate && Game::isInGame) {
+    for (int i = 0; i < (int)Game::players.size(); i++) {
+      const auto &sp = Game::players[i];
+      if (sp.isDead) continue;
+      ImGui::PushID(700 + i);
+      bool active = (g_spectateTarget == sp.playerId);
+      if (active) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{0, 0.6f, 1, 0.7f});
+      if (GlowBtn(sp.name.c_str(), {160, 22}))
+        g_spectateTarget = sp.playerId;
+      if (active) ImGui::PopStyleColor();
+      ImGui::PopID();
+    }
+  }
   EndCard();
 
   Card("Vent ESP");

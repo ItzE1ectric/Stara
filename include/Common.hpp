@@ -130,6 +130,12 @@ extern bool g_endlessTracking, g_noTrackDelay, g_noTrackCooldown; // Tracker
 extern bool g_noSsAnimation, g_endlessSsDuration;       // Shapeshifter
 extern bool g_killWhileVanished;                        // Phantom
 extern bool g_unfixableLights;                          // Ship
+// Tracers
+extern bool g_tracerCrew, g_tracerImp, g_tracerGhost, g_tracerBodies,
+    g_tracerColorBased;
+// Camera
+extern bool g_freecam, g_spectate;
+extern int g_spectateTarget;
 extern float g_customDiscussTime, g_customVoteTime;
 extern char g_chatBuf[128];
 

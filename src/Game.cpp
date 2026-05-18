@@ -626,6 +626,7 @@ static bool TryGetPlayerWorldPos(void *pcObj, float &outX, float &outY) {
 }
 
 static void UpdateCameraState(); // forward decl
+static float camX = 0, camY = 0, orthoSize = 3.0f; // camera state (used by ESP + freecam)
 
 // Read color from PlayerControl.cosmetics.get_ColorId (SEH-safe helper)
 static int ReadColorId(void *pcObj) {
@@ -779,6 +780,61 @@ static void UpdateInternal() {
   // Update camera for ESP (in-game only)
   if (isInGame)
     UpdateCameraState();
+
+  // Freecam / Spectate — override camera position after reading it
+  if (isInGame && gameAssembly && (g_freecam || g_spectate)) {
+    static float freecamX = 0, freecamY = 0;
+    static bool freecamInit = false;
+    typedef void *(__cdecl *GetMainCamera_fn)(void *);
+    auto getMain = (GetMainCamera_fn)(gameAssembly + g_rvaCameraGetMain);
+    void *cam = getMain(nullptr);
+    if (IsValid(cam) && Transform::klass) {
+      static void *get_transform_m = nullptr;
+      if (!get_transform_m) {
+        void *ck = *(void **)cam;
+        if (IsValid(ck))
+          get_transform_m = il2cpp_class_get_method_from_name(ck, "get_transform", 0);
+      }
+      if (get_transform_m) {
+        void *camTf = il2cpp_runtime_invoke(get_transform_m, cam, nullptr, nullptr);
+        if (IsValid(camTf)) {
+          static void *set_pos_m = nullptr;
+          if (!set_pos_m)
+            set_pos_m = il2cpp_class_get_method_from_name(Transform::klass, "set_position", 1);
+
+          if (g_spectate && g_spectateTarget >= 0) {
+            // Spectate: move camera to target player position
+            for (const auto &p : players) {
+              if (p.playerId == g_spectateTarget && p.hasWorldPos) {
+                freecamX = p.x;
+                freecamY = p.y;
+                break;
+              }
+            }
+          } else if (g_freecam) {
+            if (!freecamInit) {
+              freecamX = camX;
+              freecamY = camY;
+              freecamInit = true;
+            }
+            float spd = 0.15f;
+            if (GetAsyncKeyState('W') & 0x8000 || GetAsyncKeyState(VK_UP) & 0x8000) freecamY += spd;
+            if (GetAsyncKeyState('S') & 0x8000 || GetAsyncKeyState(VK_DOWN) & 0x8000) freecamY -= spd;
+            if (GetAsyncKeyState('A') & 0x8000 || GetAsyncKeyState(VK_LEFT) & 0x8000) freecamX -= spd;
+            if (GetAsyncKeyState('D') & 0x8000 || GetAsyncKeyState(VK_RIGHT) & 0x8000) freecamX += spd;
+          }
+
+          if (set_pos_m) {
+            struct Vec3 { float x, y, z; } pos = {freecamX, freecamY, -10.f};
+            void *args[] = {&pos};
+            il2cpp_runtime_invoke(set_pos_m, camTf, args, nullptr);
+          }
+        }
+      }
+    }
+    if (!g_freecam && !g_spectate)
+      freecamInit = false;
+  }
 
   if (!get_playerName_method && GameData::klass) {
     get_playerName_method = il2cpp_class_get_method_from_name(
@@ -1187,6 +1243,7 @@ static void UpdateInternal() {
             p.name = "Player " + std::to_string(p.playerId);
           }
 
+          p.colorId = ReadColorId(pcObj);
           p.hasWorldPos = TryGetPlayerWorldPos(pcObj, p.x, p.y);
           if (!p.hasWorldPos) {
             p.x = localX;
@@ -1683,8 +1740,7 @@ void PlayAnimation(uint8_t animId) {
   }
 }
 
-// Camera state for ESP (updated in UpdateInternal)
-static float camX = 0, camY = 0, orthoSize = 3.0f;
+// Camera state for ESP — declared near top of file, updated below
 
 static void UpdateCameraState() {
   if (!gameAssembly)
@@ -1828,10 +1884,57 @@ void DrawESP(ImDrawList *drawList) {
         drawList->AddCircleFilled(pp, 1.6f, IM_COL32(135, 235, 255, 170), 8);
       }
     }
-    if (g_espTracer) {
-      ImVec2 bot = {screenW / 2.f, screenH};
-      drawList->AddLine(bot, {sp.x, sp.y}, (col & 0x00FFFFFF) | 0x80000000,
-                        1.2f);
+    // Tracer lines — category-based (MalumMenu style)
+    {
+      bool drawTracer = false;
+      ImU32 tracerCol = col;
+
+      if (g_espTracer) {
+        // Legacy: draw all
+        drawTracer = true;
+      }
+      // Category overrides
+      if (!p.isDead && !p.isImpostor && g_tracerCrew)
+        drawTracer = true;
+      if (!p.isDead && p.isImpostor && g_tracerImp)
+        drawTracer = true;
+      if (p.isDead && g_tracerGhost) {
+        drawTracer = true;
+        tracerCol = IM_COL32(255, 255, 255, 180);
+      }
+      if (p.isDead && g_tracerBodies) {
+        drawTracer = true;
+        tracerCol = IM_COL32(255, 220, 0, 200);
+      }
+      // Color-based: override tracer color with player color
+      if (drawTracer && g_tracerColorBased) {
+        static const ImU32 auColors[] = {
+            IM_COL32(198, 17, 17, 255),   // Red
+            IM_COL32(19, 46, 210, 255),   // Blue
+            IM_COL32(17, 128, 45, 255),   // Green
+            IM_COL32(238, 84, 187, 255),  // Pink
+            IM_COL32(240, 125, 13, 255),  // Orange
+            IM_COL32(246, 246, 87, 255),  // Yellow
+            IM_COL32(63, 71, 78, 255),    // Black
+            IM_COL32(215, 225, 241, 255), // White
+            IM_COL32(107, 47, 188, 255),  // Purple
+            IM_COL32(113, 73, 30, 255),   // Brown
+            IM_COL32(56, 255, 188, 255),  // Cyan
+            IM_COL32(80, 240, 57, 255),   // Lime
+            IM_COL32(108, 47, 58, 255),   // Maroon
+            IM_COL32(240, 211, 165, 255), // Rose
+            IM_COL32(255, 214, 236, 255), // Banana
+            IM_COL32(120, 135, 145, 255), // Gray
+            IM_COL32(180, 130, 100, 255), // Tan
+            IM_COL32(220, 100, 100, 255), // Coral
+        };
+        if (p.colorId >= 0 && p.colorId < 18)
+          tracerCol = auColors[p.colorId];
+      }
+      if (drawTracer) {
+        ImVec2 bot = {screenW / 2.f, screenH};
+        drawList->AddLine(bot, {sp.x, sp.y}, (tracerCol & 0x00FFFFFF) | 0xA0000000, 1.2f);
+      }
     }
   }
 
