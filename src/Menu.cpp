@@ -1498,7 +1498,7 @@ static void TabPlayer() {
   Toggle("Auto Spam Chat", &g_chatSpam);
   EndCard();
 
-  Card("Kill Players (Host)");
+  Card("Kill Players");
   if (!Game::isInGame) {
     ImGui::TextColored({1, 0.3f, 0.3f, 1}, "Not in game");
   } else {

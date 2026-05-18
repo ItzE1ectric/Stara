@@ -2088,8 +2088,23 @@ void SetPlayerRole(int playerIndex, int roleType) {
 
 // MurderPlayer RVA: 0x5C5D70  (direct kill, no role check)
 // RpcMurderPlayer RVA: 0x5C8CC0 (network sync)
+// CmdCheckMurder RVA: 0x5C1A50 (normal game kill flow — MalumMenu style)
 typedef void(__cdecl *MurderPlayer_fn)(void *, void *, uint32_t, void *);
 typedef void(__cdecl *RpcMurderPlayer_fn)(void *, void *, bool, void *);
+typedef void(__cdecl *CmdCheckMurder_fn)(void *, void *, void *);
+static const uintptr_t g_rvaCmdCheckMurder = 0x5C1A50;
+
+// Helper: temporarily set local player to impostor role for kill validation
+static void EnsureImpostorForKill(void *lp) {
+  void *data = *(void **)((uintptr_t)lp + 0x58);
+  if (IsValid(data)) {
+    uint16_t role = *(uint16_t *)((uintptr_t)data + 0x38);
+    // If not already impostor-type, set to impostor temporarily
+    if (role != 1 && role != 5 && role != 7 && role != 9 && role != 18) {
+      SetFakeRoleLocal(lp, 1); // Impostor
+    }
+  }
+}
 
 void KillPlayer(int playerIndex) {
   Attach();
@@ -2097,15 +2112,28 @@ void KillPlayer(int playerIndex) {
   void *target = ResolveTargetPlayer(playerIndex);
   if (!IsValid(lp) || !IsValid(target) || !gameAssembly)
     return;
-  SpoofHost();
-  __try {
-    auto fn = (MurderPlayer_fn)(gameAssembly + g_rvaMurderPlayer);
-    fn(lp, target, 1, nullptr); // MurderResultFlags::Succeeded
-    auto rpc = (RpcMurderPlayer_fn)(gameAssembly + g_rvaRpcMurderPlayer);
-    rpc(lp, target, true, nullptr);
-  } __except (EXCEPTION_EXECUTE_HANDLER) {
+
+  if (IsHost()) {
+    // Host: direct RPC bypass (guaranteed kill)
+    SpoofHost();
+    __try {
+      auto fn = (MurderPlayer_fn)(gameAssembly + g_rvaMurderPlayer);
+      fn(lp, target, 1, nullptr);
+      auto rpc = (RpcMurderPlayer_fn)(gameAssembly + g_rvaRpcMurderPlayer);
+      rpc(lp, target, true, nullptr);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+    RestoreHost();
+  } else {
+    // Non-host: use CmdCheckMurder (normal game flow, like MalumMenu)
+    // Ensure we have impostor role locally so validation passes
+    EnsureImpostorForKill(lp);
+    __try {
+      auto fn = (CmdCheckMurder_fn)(gameAssembly + g_rvaCmdCheckMurder);
+      fn(lp, target, nullptr);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
   }
-  RestoreHost();
 }
 
 void KillAllPlayers() {
@@ -2113,8 +2141,6 @@ void KillAllPlayers() {
   void *lp = GetLocalPlayer();
   if (!IsValid(lp) || !gameAssembly)
     return;
-  auto murder = (MurderPlayer_fn)(gameAssembly + g_rvaMurderPlayer);
-  auto rpcMurder = (RpcMurderPlayer_fn)(gameAssembly + g_rvaRpcMurderPlayer);
   void *field = il2cpp_class_get_field_from_name(PlayerControl::klass,
                                                  "AllPlayerControls");
   void *list = nullptr;
@@ -2139,19 +2165,40 @@ void KillAllPlayers() {
   if (!IsValid(l->items))
     return;
   A *a = (A *)l->items;
-  SpoofHost();
-  __try {
-    for (int i = 0; i < l->size && i < a->len; i++) {
-      void *p = a->m_Items[i];
-      if (IsValid(p) && p != lp) {
-        murder(lp, p, 1, nullptr);
-        rpcMurder(lp, p, true, nullptr);
-        Sleep(50);
+
+  if (IsHost()) {
+    // Host: direct kill
+    auto murder = (MurderPlayer_fn)(gameAssembly + g_rvaMurderPlayer);
+    auto rpcMurder =
+        (RpcMurderPlayer_fn)(gameAssembly + g_rvaRpcMurderPlayer);
+    SpoofHost();
+    __try {
+      for (int i = 0; i < l->size && i < a->len; i++) {
+        void *p = a->m_Items[i];
+        if (IsValid(p) && p != lp) {
+          murder(lp, p, 1, nullptr);
+          rpcMurder(lp, p, true, nullptr);
+          Sleep(50);
+        }
       }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
     }
-  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    RestoreHost();
+  } else {
+    // Non-host: CmdCheckMurder each player (MalumMenu style)
+    EnsureImpostorForKill(lp);
+    auto cmd = (CmdCheckMurder_fn)(gameAssembly + g_rvaCmdCheckMurder);
+    __try {
+      for (int i = 0; i < l->size && i < a->len; i++) {
+        void *p = a->m_Items[i];
+        if (IsValid(p) && p != lp) {
+          cmd(lp, p, nullptr);
+          Sleep(80);
+        }
+      }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
   }
-  RestoreHost();
 }
 
 // CmdReportDeadBody RVA: 0x5C2150
