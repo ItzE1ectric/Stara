@@ -432,6 +432,46 @@ bool IsHost() {
   }
 }
 
+// Get AmongUsClient.Instance
+static void *GetAmongUsClientInstance() {
+  if (!AmongUsClient::klass)
+    return nullptr;
+  void *field =
+      il2cpp_class_get_field_from_name(AmongUsClient::klass, "Instance");
+  void *inst = nullptr;
+  if (field)
+    il2cpp_field_static_get_value(field, &inst);
+  return IsValid(inst) ? inst : nullptr;
+}
+
+// Temporarily spoof host authority so RPCs pass internal validation.
+// InnerNetClient: HostId at 0x30, ClientId at 0x34.
+// AmHost property = (HostId == ClientId).
+static int s_savedHostId = -1;
+static bool s_spoofed = false;
+
+static void SpoofHost() {
+  void *inst = GetAmongUsClientInstance();
+  if (!inst)
+    return;
+  int hostId = *(int *)((uintptr_t)inst + 0x30);
+  int clientId = *(int *)((uintptr_t)inst + 0x34);
+  if (hostId != clientId) {
+    s_savedHostId = hostId;
+    *(int *)((uintptr_t)inst + 0x30) = clientId; // make AmHost = true
+    s_spoofed = true;
+  }
+}
+
+static void RestoreHost() {
+  if (!s_spoofed)
+    return;
+  void *inst = GetAmongUsClientInstance();
+  if (inst)
+    *(int *)((uintptr_t)inst + 0x30) = s_savedHostId;
+  s_spoofed = false;
+}
+
 static void *get_playerName_method = nullptr;
 static void *pc_setName_method = nullptr;
 static void *pc_setLevel_method = nullptr;
@@ -805,28 +845,36 @@ static void UpdateInternal() {
       static int h = 0;
       h = (h + 1) % 18;
       if (gameAssembly) {
+        SpoofHost();
         auto fn = (RpcSetColor_fn)(gameAssembly + g_rvaRpcSetColor);
         fn(lp, (uint8_t)h, nullptr);
+        RestoreHost();
       }
     }
 
     if (g_spin && gameAssembly && CanSendRpc()) {
+      SpoofHost();
       auto fn = (RpcPlayAnimation_fn)(gameAssembly + g_rvaRpcPlayAnimation);
       fn(lp, 2, nullptr);
+      RestoreHost();
     }
 
     if (g_dance && gameAssembly && CanSendRpc()) {
+      SpoofHost();
       static uint8_t danceAnim = 0;
       auto fn = (RpcPlayAnimation_fn)(gameAssembly + g_rvaRpcPlayAnimation);
       fn(lp, danceAnim, nullptr);
       danceAnim = (uint8_t)((danceAnim + 1) % 3);
+      RestoreHost();
     }
 
     if (g_particle && gameAssembly && CanSendCosmeticRpc()) {
+      SpoofHost();
       static int particleHue = 0;
       particleHue = (particleHue + 1) % 18;
       auto fn = (RpcSetColor_fn)(gameAssembly + g_rvaRpcSetColor);
       fn(lp, (uint8_t)particleHue, nullptr);
+      RestoreHost();
     }
 
     {
@@ -914,17 +962,21 @@ static void UpdateInternal() {
 
       // 7. Color Cycle
       if (g_colorCycle && CanSendCosmeticRpc() && gameAssembly) {
+        SpoofHost();
         static int cc = 0;
         cc = (cc + 1) % 18;
         auto fn = (RpcSetColor_fn)(gameAssembly + g_rvaRpcSetColor);
         fn(lp, (uint8_t)cc, nullptr);
+        RestoreHost();
       }
 
       // 8. Spam Animation
       if (g_spamAnim && gameAssembly && CanSendRpc()) {
+        SpoofHost();
         auto fn =
             (RpcPlayAnimation_fn)(gameAssembly + g_rvaRpcPlayAnimation);
         fn(lp, (uint8_t)(rand() % 3), nullptr);
+        RestoreHost();
       }
 
       // 9. Auto Tasks — complete tasks every 5 seconds
@@ -943,9 +995,11 @@ static void UpdateInternal() {
         fpTimer += 0.033f;
         if (fpTimer > 5.0f) {
           fpTimer = 0;
+          SpoofHost();
           auto fn =
               (RpcProtectPlayer_fn)(gameAssembly + g_rvaRpcProtectPlayer);
           fn(lp, lp, 0, nullptr);
+          RestoreHost();
         }
       }
     } // end isInGame toggles
@@ -1257,20 +1311,13 @@ void ForceEmergencyMeeting() {
   void *lp = GetLocalPlayer();
   if (!IsValid(lp) || !gameAssembly)
     return;
-
+  SpoofHost();
   __try {
-    if (IsHost()) {
-      // Host: use RpcStartMeeting(null) — bypasses meeting checks
-      auto fn = (RpcStartMeeting_fn)(gameAssembly + g_rvaRpcStartMeeting);
-      fn(lp, nullptr, nullptr);
-    } else {
-      // Non-host: use CmdReportDeadBody(null) — normal report flow
-      auto fn = (CmdReportDeadBody_fn)(gameAssembly + g_rvaCmdReportDeadBody);
-      fn(lp, nullptr, nullptr);
-    }
+    auto fn = (RpcStartMeeting_fn)(gameAssembly + g_rvaRpcStartMeeting);
+    fn(lp, nullptr, nullptr);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
-    printf("[!] Stara: ForceEmergencyMeeting caught exception\n");
   }
+  RestoreHost();
 }
 
 // (typedefs moved to top of file)
@@ -1280,11 +1327,13 @@ void SetPlayerColor(int colorId) {
   void *lp = GetLocalPlayer();
   if (!IsValid(lp) || !gameAssembly)
     return;
+  SpoofHost();
   __try {
     auto fn = (RpcSetColor_fn)(gameAssembly + g_rvaRpcSetColor);
     fn(lp, (uint8_t)colorId, nullptr);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
+  RestoreHost();
 }
 
 void TeleportTo(float x, float y) {
@@ -1442,11 +1491,13 @@ void SetHat(int hatId) {
   constexpr int NUM_HATS = sizeof(hatIds) / sizeof(hatIds[0]);
   if (hatId < 0 || hatId >= NUM_HATS)
     return;
+  SpoofHost();
   __try {
     auto fn = (RpcSetHat_fn)(gameAssembly + g_rvaRpcSetHat);
     fn(lp, il2cpp_string_new(hatIds[hatId]), nullptr);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
+  RestoreHost();
 }
 
 void SetPet(int petId) {
@@ -1465,11 +1516,13 @@ void SetPet(int petId) {
   constexpr int NUM_PETS = sizeof(petIds) / sizeof(petIds[0]);
   if (petId < 0 || petId >= NUM_PETS)
     return;
+  SpoofHost();
   __try {
     auto fn = (RpcSetPet_fn)(gameAssembly + g_rvaRpcSetPet);
     fn(lp, il2cpp_string_new(petIds[petId]), nullptr);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
+  RestoreHost();
 }
 
 void SetSkin(int skinId) {
@@ -1488,11 +1541,13 @@ void SetSkin(int skinId) {
   constexpr int NUM_SKINS = sizeof(skinIds) / sizeof(skinIds[0]);
   if (skinId < 0 || skinId >= NUM_SKINS)
     return;
+  SpoofHost();
   __try {
     auto fn = (RpcSetSkin_fn)(gameAssembly + g_rvaRpcSetSkin);
     fn(lp, il2cpp_string_new(skinIds[skinId]), nullptr);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
+  RestoreHost();
 }
 
 void SetCharacterScale(float scale) {
@@ -1788,12 +1843,13 @@ void StartGame() {
     il2cpp_field_static_get_value(field, &inst);
   if (!IsValid(inst))
     return;
+  SpoofHost();
   __try {
-    // MalumMenu uses SendStartGame() not StartGame()
     auto fn = (StartGame_fn)(gameAssembly + g_rvaAmongUsClientSendStartGame);
     fn(inst, nullptr);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
+  RestoreHost();
 }
 
 void TeleportToRoom(int roomId) {
@@ -1972,11 +2028,13 @@ static void ApplyRoleToPlayer(void *targetPc, int roleType) {
   }
 
   // 3. Network: RpcSetRole broadcasts to all clients
+  SpoofHost();
   __try {
     auto fn = (RpcSetRole_fn)(gameAssembly + g_rvaRpcSetRole);
     fn(targetPc, (uint16_t)roleType, true, nullptr);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
+  RestoreHost();
 }
 
 static void RevivePlayerControl(void *playerControl, bool syncRole) {
@@ -2048,6 +2106,7 @@ void KillPlayer(int playerIndex) {
   void *target = ResolveTargetPlayer(playerIndex);
   if (!IsValid(lp) || !IsValid(target) || !gameAssembly)
     return;
+  SpoofHost();
   __try {
     auto fn = (MurderPlayer_fn)(gameAssembly + g_rvaMurderPlayer);
     fn(lp, target, 1, nullptr); // MurderResultFlags::Succeeded
@@ -2055,6 +2114,7 @@ void KillPlayer(int playerIndex) {
     rpc(lp, target, true, nullptr);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
+  RestoreHost();
 }
 
 void KillAllPlayers() {
@@ -2088,6 +2148,7 @@ void KillAllPlayers() {
   if (!IsValid(l->items))
     return;
   A *a = (A *)l->items;
+  SpoofHost();
   __try {
     for (int i = 0; i < l->size && i < a->len; i++) {
       void *p = a->m_Items[i];
@@ -2099,6 +2160,7 @@ void KillAllPlayers() {
     }
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
+  RestoreHost();
 }
 
 // CmdReportDeadBody RVA: 0x5C2150
@@ -2131,11 +2193,13 @@ void SetVisor(int visorId) {
                        "visor_pk01_AngeryVisor"};
   if (visorId < 0 || visorId > 4)
     return;
+  SpoofHost();
   __try {
     auto fn = (RpcSetVisor_fn)(gameAssembly + g_rvaRpcSetVisor);
     fn(lp, il2cpp_string_new(ids[visorId]), nullptr);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
+  RestoreHost();
 }
 
 // RpcSetNamePlate RVA: 0x5C96C0
@@ -2150,11 +2214,13 @@ void SetNamePlate(int npId) {
                        "nameplate_is_yard"};
   if (npId < 0 || npId > 4)
     return;
+  SpoofHost();
   __try {
     auto fn = (RpcSetNamePlate_fn)(gameAssembly + g_rvaRpcSetNamePlate);
     fn(lp, il2cpp_string_new(ids[npId]), nullptr);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
+  RestoreHost();
 }
 
 // RpcSetLevel RVA: 0x5C9620
@@ -2165,18 +2231,19 @@ void SetLevel(int level) {
   if (!IsValid(lp))
     return;
   __try {
-    // Among Us stores level internally as (displayLevel - 1).
     uint32_t storedLevel = (level > 0) ? (uint32_t)(level - 1) : 0;
 
-    // Write to NetworkedPlayerInfo.PlayerLevel field (offset 0x44)
     void *data = *(void **)((uintptr_t)lp + 0x58);
     if (IsValid(data))
       *(uint32_t *)((uintptr_t)data + 0x44) = storedLevel;
     if (gameAssembly) {
+      SpoofHost();
       auto rpcSetLevel = (RpcSetLevel_fn)(gameAssembly + g_rvaRpcSetLevel);
       rpcSetLevel(lp, storedLevel, nullptr);
+      RestoreHost();
     }
   } __except (EXCEPTION_EXECUTE_HANDLER) {
+    RestoreHost();
   }
 }
 
@@ -2203,11 +2270,13 @@ void ShapeshiftTo(int playerIndex) {
   void *target = ResolveTargetPlayer(playerIndex);
   if (!IsValid(lp) || !IsValid(target) || !gameAssembly)
     return;
+  SpoofHost();
   __try {
     auto fn = (RpcShapeshift_fn)(gameAssembly + g_rvaRpcShapeshift);
     fn(lp, target, true, nullptr);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
+  RestoreHost();
 }
 
 // RpcVanish RVA: 0x5CA3E0
@@ -2217,11 +2286,13 @@ void Vanish() {
   void *lp = GetLocalPlayer();
   if (!IsValid(lp) || !gameAssembly)
     return;
+  SpoofHost();
   __try {
     auto fn = (RpcVanish_fn)(gameAssembly + g_rvaRpcVanish);
     fn(lp, nullptr);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
+  RestoreHost();
 }
 
 // RpcAppear RVA: 0x5C8BA0
@@ -2231,11 +2302,13 @@ void Appear() {
   void *lp = GetLocalPlayer();
   if (!IsValid(lp) || !gameAssembly)
     return;
+  SpoofHost();
   __try {
     auto fn = (RpcAppear_fn)(gameAssembly + g_rvaRpcAppear);
     fn(lp, true, nullptr);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
+  RestoreHost();
 }
 
 // Vent RPCs: Enter 0x5E3250, Exit 0x5E3340
@@ -2248,11 +2321,13 @@ void EnterVent(int ventId) {
   void *phys = *(void **)((uintptr_t)lp + 0x94); // MyPhysics (PlayerPhysics)
   if (!IsValid(phys))
     return;
+  SpoofHost();
   __try {
     auto fn = (RpcVent_fn)(gameAssembly + g_rvaRpcEnterVent);
     fn(phys, ventId, nullptr);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
+  RestoreHost();
 }
 
 void ExitVent(int ventId) {
@@ -2263,11 +2338,13 @@ void ExitVent(int ventId) {
   void *phys = *(void **)((uintptr_t)lp + 0x94);
   if (!IsValid(phys))
     return;
+  SpoofHost();
   __try {
     auto fn = (RpcVent_fn)(gameAssembly + g_rvaRpcExitVent);
     fn(phys, ventId, nullptr);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
+  RestoreHost();
 }
 
 // RpcCloseDoorsOfType RVA: 0x637E00
@@ -2282,11 +2359,13 @@ void CloseDoors(int roomType) {
     il2cpp_field_static_get_value(field, &inst);
   if (!IsValid(inst))
     return;
+  SpoofHost();
   __try {
     auto fn = (RpcCloseDoors_fn)(gameAssembly + g_rvaRpcCloseDoorsOfType);
     fn(inst, roomType, nullptr);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
+  RestoreHost();
 }
 
 // RpcUpdateSystem RVA: 0x637EB0
@@ -2301,12 +2380,14 @@ void RepairSabotage(int systemType) {
     il2cpp_field_static_get_value(field, &inst);
   if (!IsValid(inst))
     return;
+  SpoofHost();
   __try {
     // amount = 128 fixes most sabotages
     auto fn = (RpcUpdateSystem_fn)(gameAssembly + g_rvaRpcUpdateSystem);
     fn(inst, systemType, 128, nullptr);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
+  RestoreHost();
 }
 
 void TeleportToPlayer(int playerIndex) {
@@ -2330,11 +2411,13 @@ void ProtectPlayer(int playerIndex) {
   void *target = ResolveTargetPlayer(playerIndex);
   if (!IsValid(lp) || !IsValid(target) || !gameAssembly)
     return;
+  SpoofHost();
   __try {
     auto fn = (RpcProtectPlayer_fn)(gameAssembly + g_rvaRpcProtectPlayer);
     fn(lp, target, 0, nullptr);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
+  RestoreHost();
 }
 
 void CloseAllDoors() {
@@ -2403,6 +2486,7 @@ void TeleportAllToSelf() {
     return;
   A *a = (A *)l->items;
   auto fn = (RpcSnapTo_fn)(gameAssembly + g_rvaRpcSnapTo);
+  SpoofHost();
   __try {
     for (int i = 0; i < l->size && i < a->len; i++) {
       void *p = a->m_Items[i];
@@ -2414,6 +2498,7 @@ void TeleportAllToSelf() {
     }
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
+  RestoreHost();
 }
 
 void SetDiscussionTime(float time) {
