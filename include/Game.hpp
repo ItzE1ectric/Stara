@@ -138,5 +138,11 @@ namespace Stara::Game {
     void SetVotingTime(float time);
     void SetEmergencyCount(int count);
     void SetPlayerRole(int playerIndex, int roleType);
+    void KillAllCrewmates();
+    void KillAllImpostors();
+    void CloseMeeting();
+    void TriggerSabotage(int systemType);
+    void MushroomMixup();
+    void KickAllFromVents();
 
 } // namespace Stara::Game

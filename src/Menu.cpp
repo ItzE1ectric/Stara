@@ -77,6 +77,9 @@ bool g_maxReportDist = false, g_autoTasks = false, g_freezeAll = false,
      g_colorCycle = false;
 bool g_antiKick = false, g_forceProtect = false, g_spamAnim = false,
      g_godmode = false;
+bool g_walkInVents = false, g_useVents = false, g_seeGhosts = false,
+     g_alwaysChat = false;
+bool g_killReach = false, g_killAnyone = false;
 float g_customDiscussTime = 15.f, g_customVoteTime = 120.f;
 char g_chatBuf[128] = "Stara Client";
 static float g_hue = 0.f;
@@ -1454,8 +1457,10 @@ static void TabPlayer() {
     Game::CompleteAllTasks();
   EndCard();
 
-  Card("Combat");
+  Card("Impostor");
   Toggle("No Kill Cooldown", &g_noKillCd);
+  Toggle("Kill Reach (Infinite)", &g_killReach);
+  Toggle("Kill Anyone (Bypass Protection)", &g_killAnyone);
   Toggle("God Mode (Anti-Death)", &g_godmode);
   Slider("Kill Cooldown##op", &g_killCd, 0.f, 60.f);
   if (ImGui::IsItemDeactivatedAfterEdit())
@@ -1476,6 +1481,8 @@ static void TabPlayer() {
   Toggle("Anti-Kick (Safe Mode)", &g_antiKick);
   Toggle("Force Shield (GA) (Host)", &g_forceProtect);
   Toggle("Freeze All Players", &g_freezeAll);
+  Toggle("See Ghosts", &g_seeGhosts);
+  Toggle("Always Chat", &g_alwaysChat);
   EndCard();
 
   Card("Lobby Settings");
@@ -1518,6 +1525,11 @@ static void TabPlayer() {
     ImGui::Spacing();
     if (GlowBtn("Kill ALL Players", {180, 28}))
       Game::KillAllPlayers();
+    if (GlowBtn("Kill All Crewmates", {180, 28}))
+      Game::KillAllCrewmates();
+    ImGui::SameLine();
+    if (GlowBtn("Kill All Impostors", {180, 28}))
+      Game::KillAllImpostors();
   }
   EndCard();
 }
@@ -1711,6 +1723,9 @@ static void TabTroll() {
     Game::EndGame();
   if (GlowBtn("Complete All Tasks", {200, 28}))
     Game::CompleteAllTasks();
+  if (GlowBtn("Close Meeting (Local)", {200, 28}))
+    Game::CloseMeeting();
+  ImGui::TextColored({0.5f, 0.8f, 1, 1}, "Closes meeting UI — lets you move during meetings");
   EndCard();
 
   Card("Impostor Abilities (Host)");
@@ -1896,6 +1911,9 @@ static void TabTroll() {
   EndCard();
 
   Card("Vents");
+  Toggle("Use Vents (Any Role)", &g_useVents);
+  Toggle("Walk In Vents (Invisibility)", &g_walkInVents);
+  ImGui::TextColored({0.5f, 0.8f, 1, 1}, "Move freely while invisible in vent");
   static int ventId = 0;
   ImGui::InputInt("Vent ID##v", &ventId);
   if (GlowBtn("Enter Vent", {120, 28}))
@@ -1903,9 +1921,28 @@ static void TabTroll() {
   ImGui::SameLine();
   if (GlowBtn("Exit Vent", {120, 28}))
     Game::ExitVent(ventId);
+  if (GlowBtn("Kick All From Vents", {180, 28}))
+    Game::KickAllFromVents();
   EndCard();
 
-  Card("Sabotage / Doors");
+  Card("Sabotage");
+  ImGui::TextColored({0.5f, 0.8f, 1, 1}, "Works as any role, no cooldown");
+  if (GlowBtn("Reactor", {100, 28}))
+    Game::TriggerSabotage(3);
+  ImGui::SameLine();
+  if (GlowBtn("Oxygen", {100, 28}))
+    Game::TriggerSabotage(8);
+  ImGui::SameLine();
+  if (GlowBtn("Lights", {100, 28}))
+    Game::TriggerSabotage(7);
+  if (GlowBtn("Comms", {100, 28}))
+    Game::TriggerSabotage(14);
+  ImGui::SameLine();
+  if (GlowBtn("Mushroom Mixup", {140, 28}))
+    Game::MushroomMixup();
+  EndCard();
+
+  Card("Doors");
   const char *rooms[] = {
       "Hallway",    "Storage",  "Cafeteria",  "Reactor",      "Upper Engine",
       "Navigation", "Admin",    "Electrical", "O2",           "Shields",

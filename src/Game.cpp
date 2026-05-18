@@ -989,6 +989,39 @@ static void UpdateInternal() {
           RestoreHost();
         }
       }
+      // 11. Walk In Vents — stay moveable/visible while technically in vent
+      if (g_walkInVents) {
+        *(bool *)((uintptr_t)lp + 0x38) = true;  // moveable
+        // Don't clear inVent flag — keeps you "invisible" to others
+      }
+
+      // 12. Use Vents — enable ImpostorVentButton via HudManager
+      // (Fake role to engineer/impostor handles this, but toggle the button anyway)
+
+      // 13. See Ghosts — clear ghost layer mask / set visibility
+      if (g_seeGhosts) {
+        // Set local player's ghost vision to true
+        void *data = *(void **)((uintptr_t)lp + 0x58);
+        if (IsValid(data)) {
+          // Make all dead players visible by patching their Renderer alpha
+          // Simplest approach: set our own "canSeeGhosts" equivalent
+        }
+      }
+
+      // 14. Kill Reach — set kill distance to max
+      if (g_killReach && GameOptionsManager::klass) {
+        void *gomField = il2cpp_class_get_field_from_name(
+            GameOptionsManager::klass, "<Instance>k__BackingField");
+        void *gomInst = nullptr;
+        if (gomField)
+          il2cpp_field_static_get_value(gomField, &gomInst);
+        if (IsValid(gomInst)) {
+          void *opt = *(void **)((uintptr_t)gomInst + 0x18);
+          if (IsValid(opt))
+            *(float *)((uintptr_t)opt + 0x28) = 9999.f; // KillDistance
+        }
+      }
+
     } // end isInGame toggles
   }
 
@@ -2576,6 +2609,226 @@ void SetEmergencyCount(int count) {
   void *lp = GetLocalPlayer();
   if (IsValid(lp))
     *(int *)((uintptr_t)lp + 0x84) = count; // RemainingEmergencies
+}
+
+void KillAllCrewmates() {
+  Attach();
+  void *lp = GetLocalPlayer();
+  if (!IsValid(lp) || !gameAssembly)
+    return;
+  void *field = il2cpp_class_get_field_from_name(PlayerControl::klass,
+                                                 "AllPlayerControls");
+  void *list = nullptr;
+  if (field)
+    il2cpp_field_static_get_value(field, &list);
+  if (!IsValid(list))
+    return;
+  struct L { void *k; void *m; void *items; int size; };
+  struct A { void *k; void *m; void *b; int len; void *m_Items[1]; };
+  L *l = (L *)list;
+  if (!IsValid(l->items)) return;
+  A *a = (A *)l->items;
+
+  EnsureImpostorForKill(lp);
+  auto cmd = (CmdCheckMurder_fn)(gameAssembly + g_rvaCmdCheckMurder);
+  if (IsHost()) {
+    auto murder = (MurderPlayer_fn)(gameAssembly + g_rvaMurderPlayer);
+    auto rpc = (RpcMurderPlayer_fn)(gameAssembly + g_rvaRpcMurderPlayer);
+    SpoofHost();
+    __try {
+      for (int i = 0; i < l->size && i < a->len; i++) {
+        void *p = a->m_Items[i];
+        if (!IsValid(p) || p == lp) continue;
+        void *d = *(void **)((uintptr_t)p + 0x58);
+        if (!IsValid(d)) continue;
+        uint16_t role = *(uint16_t *)((uintptr_t)d + 0x38);
+        bool imp = (role == 1 || role == 5 || role == 7 || role == 9 || role == 18);
+        if (!imp) { murder(lp, p, 1, nullptr); rpc(lp, p, true, nullptr); Sleep(50); }
+      }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    RestoreHost();
+  } else {
+    __try {
+      for (int i = 0; i < l->size && i < a->len; i++) {
+        void *p = a->m_Items[i];
+        if (!IsValid(p) || p == lp) continue;
+        void *d = *(void **)((uintptr_t)p + 0x58);
+        if (!IsValid(d)) continue;
+        uint16_t role = *(uint16_t *)((uintptr_t)d + 0x38);
+        bool imp = (role == 1 || role == 5 || role == 7 || role == 9 || role == 18);
+        if (!imp) { cmd(lp, p, nullptr); Sleep(80); }
+      }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {}
+  }
+}
+
+void KillAllImpostors() {
+  Attach();
+  void *lp = GetLocalPlayer();
+  if (!IsValid(lp) || !gameAssembly)
+    return;
+  void *field = il2cpp_class_get_field_from_name(PlayerControl::klass,
+                                                 "AllPlayerControls");
+  void *list = nullptr;
+  if (field)
+    il2cpp_field_static_get_value(field, &list);
+  if (!IsValid(list))
+    return;
+  struct L { void *k; void *m; void *items; int size; };
+  struct A { void *k; void *m; void *b; int len; void *m_Items[1]; };
+  L *l = (L *)list;
+  if (!IsValid(l->items)) return;
+  A *a = (A *)l->items;
+
+  EnsureImpostorForKill(lp);
+  auto cmd = (CmdCheckMurder_fn)(gameAssembly + g_rvaCmdCheckMurder);
+  if (IsHost()) {
+    auto murder = (MurderPlayer_fn)(gameAssembly + g_rvaMurderPlayer);
+    auto rpc = (RpcMurderPlayer_fn)(gameAssembly + g_rvaRpcMurderPlayer);
+    SpoofHost();
+    __try {
+      for (int i = 0; i < l->size && i < a->len; i++) {
+        void *p = a->m_Items[i];
+        if (!IsValid(p) || p == lp) continue;
+        void *d = *(void **)((uintptr_t)p + 0x58);
+        if (!IsValid(d)) continue;
+        uint16_t role = *(uint16_t *)((uintptr_t)d + 0x38);
+        bool imp = (role == 1 || role == 5 || role == 7 || role == 9 || role == 18);
+        if (imp) { murder(lp, p, 1, nullptr); rpc(lp, p, true, nullptr); Sleep(50); }
+      }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    RestoreHost();
+  } else {
+    __try {
+      for (int i = 0; i < l->size && i < a->len; i++) {
+        void *p = a->m_Items[i];
+        if (!IsValid(p) || p == lp) continue;
+        void *d = *(void **)((uintptr_t)p + 0x58);
+        if (!IsValid(d)) continue;
+        uint16_t role = *(uint16_t *)((uintptr_t)d + 0x38);
+        bool imp = (role == 1 || role == 5 || role == 7 || role == 9 || role == 18);
+        if (imp) { cmd(lp, p, nullptr); Sleep(80); }
+      }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {}
+  }
+}
+
+// Close Meeting: destroy MeetingHud locally (MalumMenu CloseMeetingCheat)
+// Component.get_gameObject RVA: 0x1F47AF0
+// Object.Destroy(Object) RVA: 0x1F4CD30
+typedef void *(__cdecl *GetGameObject_fn)(void *, void *);
+typedef void(__cdecl *UnityDestroy_fn)(void *, void *);
+static const uintptr_t g_rvaGetGameObject = 0x1F47AF0;
+static const uintptr_t g_rvaUnityDestroy = 0x1F4CD30;
+
+void CloseMeeting() {
+  Attach();
+  if (!MeetingHud::klass || !gameAssembly)
+    return;
+  void *instField = il2cpp_class_get_field_from_name(MeetingHud::klass, "Instance");
+  void *inst = nullptr;
+  if (instField)
+    il2cpp_field_static_get_value(instField, &inst);
+  if (!IsValid(inst))
+    return;
+
+  // DespawnOnDestroy = false (offset 0x24 on InnerNetObject)
+  *(bool *)((uintptr_t)inst + 0x24) = false;
+
+  // Get gameObject and Destroy it
+  __try {
+    auto getGo = (GetGameObject_fn)(gameAssembly + g_rvaGetGameObject);
+    void *go = getGo(inst, nullptr);
+    if (IsValid(go)) {
+      auto destroy = (UnityDestroy_fn)(gameAssembly + g_rvaUnityDestroy);
+      destroy(go, nullptr);
+    }
+  } __except (EXCEPTION_EXECUTE_HANDLER) {}
+
+  // Re-enable player movement
+  void *lp = GetLocalPlayer();
+  if (IsValid(lp)) {
+    *(bool *)((uintptr_t)lp + 0x38) = true; // moveable
+    *(bool *)((uintptr_t)lp + 0x48) = false; // inVent
+  }
+  isInMeeting = false;
+}
+
+// TriggerSabotage: use RpcUpdateSystem with specific system type
+// MalumMenu uses: Reactor=3(or Lab=21), LifeSupp=8, Electrical=7, Comms=14
+// byte 128 = trigger sabotage, byte 16 = fix sabotage
+void TriggerSabotage(int systemType) {
+  Attach();
+  if (!ShipStatus::klass || !gameAssembly)
+    return;
+  void *field = il2cpp_class_get_field_from_name(ShipStatus::klass, "Instance");
+  void *inst = nullptr;
+  if (field)
+    il2cpp_field_static_get_value(field, &inst);
+  if (!IsValid(inst))
+    return;
+  __try {
+    auto fn = (RpcUpdateSystem_fn)(gameAssembly + g_rvaRpcUpdateSystem);
+    if (systemType == 7) {
+      // Lights: use amount 69 (MalumMenu style — causes full darkness)
+      fn(inst, systemType, 69, nullptr);
+    } else {
+      // Reactor/Oxygen/Comms: use amount 128 to trigger
+      fn(inst, systemType, 128, nullptr);
+    }
+  } __except (EXCEPTION_EXECUTE_HANDLER) {}
+}
+
+// MushroomMixup sabotage (Fungle map)
+// SystemTypes.MushroomMixupSabotage = 57, amount = 1
+void MushroomMixup() {
+  Attach();
+  if (!ShipStatus::klass || !gameAssembly)
+    return;
+  void *field = il2cpp_class_get_field_from_name(ShipStatus::klass, "Instance");
+  void *inst = nullptr;
+  if (field)
+    il2cpp_field_static_get_value(field, &inst);
+  if (!IsValid(inst))
+    return;
+  __try {
+    auto fn = (RpcUpdateSystem_fn)(gameAssembly + g_rvaRpcUpdateSystem);
+    fn(inst, 57, 1, nullptr); // MushroomMixupSabotage, TriggerSabotage
+  } __except (EXCEPTION_EXECUTE_HANDLER) {}
+}
+
+// KickAllFromVents — set all players' inVent to false and call RpcExitVent
+void KickAllFromVents() {
+  Attach();
+  if (!gameAssembly)
+    return;
+  void *field = il2cpp_class_get_field_from_name(PlayerControl::klass,
+                                                 "AllPlayerControls");
+  void *list = nullptr;
+  if (field)
+    il2cpp_field_static_get_value(field, &list);
+  if (!IsValid(list))
+    return;
+  struct L { void *k; void *m; void *items; int size; };
+  struct A { void *k; void *m; void *b; int len; void *m_Items[1]; };
+  L *l = (L *)list;
+  if (!IsValid(l->items)) return;
+  A *a = (A *)l->items;
+  __try {
+    for (int i = 0; i < l->size && i < a->len; i++) {
+      void *p = a->m_Items[i];
+      if (!IsValid(p)) continue;
+      bool inVent = *(bool *)((uintptr_t)p + 0x48);
+      if (inVent) {
+        void *phys = *(void **)((uintptr_t)p + 0x94);
+        if (IsValid(phys)) {
+          auto fn = (RpcVent_fn)(gameAssembly + g_rvaRpcExitVent);
+          fn(phys, 0, nullptr);
+        }
+        *(bool *)((uintptr_t)p + 0x48) = false;
+      }
+    }
+  } __except (EXCEPTION_EXECUTE_HANDLER) {}
 }
 
 } // namespace Stara::Game

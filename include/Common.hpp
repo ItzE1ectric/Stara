@@ -121,6 +121,8 @@ extern bool g_noKillCd, g_infiniteEmergencies, g_alwaysMoveable,
     g_impostorVision;
 extern bool g_maxReportDist, g_autoTasks, g_freezeAll, g_colorCycle;
 extern bool g_antiKick, g_forceProtect, g_spamAnim, g_godmode;
+extern bool g_walkInVents, g_useVents, g_seeGhosts, g_alwaysChat;
+extern bool g_killReach, g_killAnyone;
 extern float g_customDiscussTime, g_customVoteTime;
 extern char g_chatBuf[128];
 
