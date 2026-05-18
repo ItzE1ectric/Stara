@@ -400,38 +400,6 @@ void *GetLocalPlayer() {
   return IsValid(lp) ? lp : nullptr;
 }
 
-// Check if we are the host (MalumMenu: AmongUsClient.Instance.AmHost)
-bool IsHost() {
-  if (!AmongUsClient::klass)
-    return false;
-  void *field =
-      il2cpp_class_get_field_from_name(AmongUsClient::klass, "Instance");
-  void *inst = nullptr;
-  if (field)
-    il2cpp_field_static_get_value(field, &inst);
-  if (!IsValid(inst))
-    return false;
-  __try {
-    static void *amHost_method = nullptr;
-    static bool methodResolved = false;
-    if (!methodResolved) {
-      // Try AmongUsClient first, then its parent InnerNetClient
-      amHost_method = il2cpp_class_get_method_from_name(
-          AmongUsClient::klass, "get_AmHost", 0);
-      methodResolved = true;
-    }
-    if (!amHost_method)
-      return false;
-    void *exc = nullptr;
-    void *result = il2cpp_runtime_invoke(amHost_method, inst, nullptr, &exc);
-    if (exc || !IsValid(result))
-      return false;
-    return *(bool *)((uintptr_t)result + sizeof(void *) * 2); // unbox bool
-  } __except (EXCEPTION_EXECUTE_HANDLER) {
-    return false;
-  }
-}
-
 // Get AmongUsClient.Instance
 static void *GetAmongUsClientInstance() {
   if (!AmongUsClient::klass)
@@ -444,32 +412,62 @@ static void *GetAmongUsClientInstance() {
   return IsValid(inst) ? inst : nullptr;
 }
 
-// Temporarily spoof host authority so RPCs pass internal validation.
-// InnerNetClient: HostId at 0x30, ClientId at 0x34.
-// AmHost property = (HostId == ClientId).
-static int s_savedHostId = -1;
-static bool s_spoofed = false;
+// --- AmHost hook (MalumMenu-style) ---
+// Hook the native get_AmHost() method so ALL internal game code thinks we're
+// host while sending RPCs. RVA from dump.cs: 0x6FEAF0.
+static const uintptr_t g_rvaGetAmHost = 0x6FEAF0;
+static bool g_forceAmHost = false;
+static bool s_amHostHooked = false;
 
-static void SpoofHost() {
-  void *inst = GetAmongUsClientInstance();
-  if (!inst)
+// IL2CPP calling convention: bool __cdecl get_AmHost(void* this, void* method)
+typedef bool(__cdecl *GetAmHost_fn)(void *, void *);
+static GetAmHost_fn orig_get_AmHost = nullptr;
+
+static bool __cdecl hk_get_AmHost(void *thisPtr, void *methodInfo) {
+  if (g_forceAmHost)
+    return true;
+  return orig_get_AmHost(thisPtr, methodInfo);
+}
+
+static void EnsureAmHostHook() {
+  if (s_amHostHooked || !gameAssembly)
     return;
-  int hostId = *(int *)((uintptr_t)inst + 0x30);
-  int clientId = *(int *)((uintptr_t)inst + 0x34);
-  if (hostId != clientId) {
-    s_savedHostId = hostId;
-    *(int *)((uintptr_t)inst + 0x30) = clientId; // make AmHost = true
-    s_spoofed = true;
+  void *target = (void *)((uintptr_t)gameAssembly + g_rvaGetAmHost);
+  if (MH_CreateHook(target, (void *)hk_get_AmHost,
+                     (void **)&orig_get_AmHost) == MH_OK) {
+    MH_EnableHook(target);
+    s_amHostHooked = true;
+    printf("[+] Stara: AmHost hook installed at GA+0x%X\n",
+           (unsigned)g_rvaGetAmHost);
   }
 }
 
-static void RestoreHost() {
-  if (!s_spoofed)
-    return;
+static void SpoofHost() {
+  EnsureAmHostHook();
+  g_forceAmHost = true;
+}
+
+static void RestoreHost() { g_forceAmHost = false; }
+
+// Check if we are the REAL host (bypasses our AmHost hook)
+bool IsHost() {
   void *inst = GetAmongUsClientInstance();
-  if (inst)
-    *(int *)((uintptr_t)inst + 0x30) = s_savedHostId;
-  s_spoofed = false;
+  if (!inst)
+    return false;
+  if (s_amHostHooked && orig_get_AmHost) {
+    __try {
+      return orig_get_AmHost(inst, nullptr);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+      return false;
+    }
+  }
+  __try {
+    int hostId = *(int *)((uintptr_t)inst + 0x30);
+    int clientId = *(int *)((uintptr_t)inst + 0x34);
+    return hostId == clientId;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return false;
+  }
 }
 
 static void *get_playerName_method = nullptr;
