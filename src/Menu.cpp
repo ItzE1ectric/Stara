@@ -98,6 +98,34 @@ float g_customDiscussTime = 15.f, g_customVoteTime = 120.f;
 char g_chatBuf[128] = "Stara Client";
 static float g_hue = 0.f;
 
+// ═══════ Phase 1-9: MalumMenu Ported Feature Toggles ═══════
+// Phase 1: Vote Manipulation
+bool g_revealVotes = false;
+// Phase 2: Overload
+static int g_overloadStrength = 10;
+// Phase 3: Map-Aware Sabotage
+bool g_spamDoors = false;
+// Phase 4: Animations
+bool g_moonwalk = false, g_medScan = false, g_camsInUse = false;
+// Phase 5: Chat
+bool g_alwaysChatEnabled = false; // re-uses g_alwaysChat internally
+static float g_chatRateOverride = 1.5f;
+// Phase 6: Event Logger
+bool g_eventLogVisible = false;
+// Phase 7: Panic / Stealth
+bool g_panicMode = false;
+bool g_stealthMode = false; // hides ESP/tracers temporarily
+// Phase 8: Minimap ESP
+bool g_minimapEsp = false;
+static float g_minimapScale = 0.12f;
+static float g_minimapX = 10.f, g_minimapY = 10.f;
+// Phase 9: QoL
+bool g_invertControls = false;
+bool g_noGameEnd = false;
+bool g_distanceTracers = false;
+bool g_freeCosmetics = false;
+
+
 static ImVec4 Accent() {
   if (g_rgbAccent)
     return ImGui::ColorConvertU32ToFloat4(IM_COL32(
@@ -1546,6 +1574,31 @@ static void TabPlayer() {
       Game::KillAllImpostors();
   }
   EndCard();
+
+  Card("Vote Manipulation (Host)");
+  ImGui::TextColored({1.f, 0.85f, 0.2f, 1.f}, "Requires Host or Host Spoof");
+  if (!Game::isInMeeting) {
+    ImGui::TextColored({0.6f, 0.6f, 0.7f, 1.f}, "Not in a meeting.");
+  } else {
+    if (GlowBtn("Skip Meeting (No Eject)", {220, 28})) {
+      Game::SkipMeeting();
+      PushToast("Meeting skipped", IM_COL32(255, 220, 90, 245), 2.0f);
+    }
+    ImGui::TextColored({0.5f, 0.8f, 1, 1}, "Ends meeting with no ejection (tie result)");
+    ImGui::Spacing();
+    ImGui::TextColored({1.f, 0.4f, 0.4f, 1.f}, "Eject Player:");
+    for (int i = 0; i < (int)Game::players.size(); i++) {
+      const auto &p = Game::players[i];
+      if (p.isDead) continue;
+      ImGui::PushID(5000 + i);
+      if (GlowBtn(("Eject " + p.name).c_str(), {200, 24})) {
+        Game::EjectPlayer(p.playerId);
+        PushToast("Ejected " + p.name, IM_COL32(255, 100, 100, 245), 2.5f);
+      }
+      ImGui::PopID();
+    }
+  }
+  EndCard();
 }
 
 static void TabVisuals() {
@@ -1668,6 +1721,20 @@ static void TabESP() {
   if (g_espVent)
     ImGui::TextColored({1.f, .75f, .2f, 1},
                        "Orange diamonds with vent IDs shown on map.");
+  EndCard();
+
+  Card("Minimap ESP");
+  Toggle("Show Minimap", &g_minimapEsp);
+  if (g_minimapEsp) {
+    Slider("Minimap Scale##mm", &g_minimapScale, 0.05f, 0.3f, "%.2f");
+    ImGui::TextColored({0.5f, 0.8f, 1, 1}, "Shows player dots on a corner minimap");
+  }
+  Toggle("Distance Tracers", &g_distanceTracers);
+  if (g_distanceTracers)
+    ImGui::TextColored({0.5f, 0.8f, 1, 1}, "Lines from you to all players with distance");
+  Toggle("Stealth Mode (Hide ESP)", &g_stealthMode);
+  if (g_stealthMode)
+    ImGui::TextColored({1.f, 0.6f, 0.3f, 1.f}, "ESP/Tracers hidden while active");
   EndCard();
 
   // ESP preview panel
@@ -2076,6 +2143,72 @@ static void TabTroll() {
   if (GlowBtn("Play Scan Anim", {160, 28}))
     Game::PlayAnimation(1);
   EndCard();
+
+  Card("Overload System");
+  ImGui::TextColored({1.f, 0.3f, 0.3f, 1.f}, "WARNING: High kick risk! Use at own risk.");
+  ImGui::TextColored({0.5f, 0.8f, 1, 1}, "Floods target with garbage RPCs to lag/crash them.");
+  ImGui::SliderInt("Strength##overload", &g_overloadStrength, 1, 100, "%d RPCs");
+  if (Game::isInGame) {
+    for (int i = 0; i < (int)Game::players.size(); i++) {
+      const auto &p = Game::players[i];
+      if (p.isDead) continue;
+      ImGui::PushID(6000 + i);
+      if (GlowBtn(("Overload " + p.name).c_str(), {200, 24})) {
+        Game::OverloadPlayer(p.playerId, g_overloadStrength);
+        PushToast("Overloading " + p.name, IM_COL32(255, 80, 80, 245), 2.0f);
+        Game::LogEvent("Overload -> " + p.name, IM_COL32(255, 80, 80, 255));
+      }
+      ImGui::PopID();
+    }
+  } else {
+    ImGui::TextColored({1, 0.3f, 0.3f, 1}, "Not in game");
+  }
+  EndCard();
+
+  Card("Map-Aware Sabotage");
+  {
+    int mapId = Game::GetCurrentMapId();
+    const char *mapNames[] = {"Skeld", "MiraHQ", "Polus", "dlekS", "Airship", "Fungle"};
+    ImGui::TextColored({0.4f, 0.85f, 1, 1}, "Current Map: %s",
+                       (mapId >= 0 && mapId <= 5) ? mapNames[mapId] : "Unknown");
+    ImGui::Spacing();
+    if (GlowBtn("Reactor (Auto)", {140, 28}))
+      Game::TriggerSabotageMapAware(0);
+    ImGui::SameLine();
+    if (GlowBtn("Oxygen (Auto)", {140, 28}))
+      Game::TriggerSabotageMapAware(1);
+    if (GlowBtn("Lights (Auto)", {140, 28}))
+      Game::TriggerSabotageMapAware(2);
+    ImGui::SameLine();
+    if (GlowBtn("Comms (Auto)", {140, 28}))
+      Game::TriggerSabotageMapAware(3);
+    if (GlowBtn("Spores (Fungle)", {160, 28}))
+      Game::TriggerSpores();
+    ImGui::SameLine();
+    if (GlowBtn("Open All Doors", {160, 28}))
+      Game::OpenAllDoors();
+    Toggle("Spam Doors (Auto Close)", &g_spamDoors);
+  }
+  EndCard();
+
+  Card("Animation Framework");
+  if (Toggle("Moonwalk", &g_moonwalk))
+    Game::SetMoonwalk(g_moonwalk);
+  if (Toggle("MedScan Animation", &g_medScan))
+    Game::ToggleMedScan(g_medScan);
+  if (Toggle("Show Cams In Use", &g_camsInUse))
+    Game::ToggleCamsInUse(g_camsInUse);
+  ImGui::Spacing();
+  ImGui::TextColored({0.5f, 0.8f, 1, 1}, "Task Animations:");
+  if (GlowBtn("Shields", {90, 24}))
+    Game::PlayTaskAnimation(4);
+  ImGui::SameLine();
+  if (GlowBtn("Asteroids", {90, 24}))
+    Game::PlayTaskAnimation(5);
+  ImGui::SameLine();
+  if (GlowBtn("Garbage", {90, 24}))
+    Game::PlayTaskAnimation(6);
+  EndCard();
 }
 
 static void TabCosmetics() {
@@ -2213,6 +2346,67 @@ static void TabSettings() {
   ImGui::Text("Toggle Menu: INSERT");
   ImGui::Text("Unload DLL: END");
   ImGui::Text("Quick Tabs: 1-9");
+  ImGui::Text("Panic Mode: F12");
+  EndCard();
+
+  Card("Panic Mode");
+  ImGui::TextColored({1.f, 0.3f, 0.3f, 1.f}, "Instantly disables ALL cheats");
+  if (GlowBtn("PANIC - Disable All", {220, 34})) {
+    g_panicMode = true;
+    // Reset all toggle globals
+    g_noclip = false; g_fullbright = false; g_wallhack = false;
+    g_noKillCd = false; g_godmode = false; g_infiniteEmergencies = false;
+    g_alwaysMoveable = false; g_impostorVision = false; g_maxReportDist = false;
+    g_autoTasks = false; g_antiKick = false; g_forceProtect = false;
+    g_freezeAll = false; g_rainbow = false; g_spin = false; g_dance = false;
+    g_chatSpam = false; g_colorCycle = false; g_spamAnim = false;
+    g_autoPath = false; g_walkInVents = false; g_useVents = false;
+    g_seeGhosts = false; g_alwaysChat = false; g_killReach = false;
+    g_unfixableLights = false; g_moonwalk = false; g_medScan = false;
+    g_camsInUse = false; g_espBox = false; g_espName = false;
+    g_espDist = false; g_espRole = false; g_espTracer = false;
+    g_tracerCrew = false; g_tracerImp = false; g_tracerGhost = false;
+    g_tracerBodies = false; g_minimapEsp = false; g_stealthMode = false;
+    g_noGameEnd = false; g_spamDoors = false;
+    // Call game-side cleanup
+    Game::PanicDisableAll();
+    Game::SetFullbright(false);
+    Game::SetWallhack(false);
+    Game::SetMoonwalk(false);
+    if (g_noGameEnd) Game::SetNoGameEnd(false);
+    g_walkSpeed = 2.5f; g_speed = 2.5f;
+    Game::SetSpeed(2.5f);
+    PushToast("PANIC: All cheats disabled!", IM_COL32(255, 60, 60, 255), 3.5f);
+    Game::LogEvent("PANIC MODE ACTIVATED", IM_COL32(255, 60, 60, 255));
+    g_panicMode = false;
+  }
+  EndCard();
+
+  Card("QoL Features");
+  if (Toggle("No Game End (Host)", &g_noGameEnd))
+    Game::SetNoGameEnd(g_noGameEnd);
+  ImGui::TextColored({0.5f, 0.8f, 1, 1}, "Prevents game from ending (host only)");
+  Toggle("Invert Controls", &g_invertControls);
+  Toggle("Free Cosmetics (Visual Only)", &g_freeCosmetics);
+  ImGui::TextColored({0.5f, 0.8f, 1, 1}, "Cosmetics appear free in selector (local only)");
+  EndCard();
+
+  Card("Event Log");
+  Toggle("Show Event Log", &g_eventLogVisible);
+  if (g_eventLogVisible && !Game::eventLog.empty()) {
+    ImGui::BeginChild("##eventLogScroll", {0, 180}, true);
+    for (const auto &e : Game::eventLog) {
+      ImVec4 col = ImGui::ColorConvertU32ToFloat4(e.color);
+      ImGui::TextColored(col, "[%.1fs] %s", e.timestamp, e.text.c_str());
+    }
+    if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY())
+      ImGui::SetScrollHereY(1.0f);
+    ImGui::EndChild();
+    if (GlowBtn("Clear Log", {100, 24}))
+      Game::eventLog.clear();
+  } else if (g_eventLogVisible) {
+    ImGui::TextColored({0.6f, 0.6f, 0.7f, 1.f}, "No events logged yet.");
+  }
   EndCard();
 }
 

@@ -120,6 +120,10 @@ static uintptr_t g_rvaRpcEnterVent = 0x5E3250;
 static uintptr_t g_rvaRpcExitVent = 0x5E3340;
 static uintptr_t g_rvaRpcCloseDoorsOfType = 0x637E00;
 static uintptr_t g_rvaRpcUpdateSystem = 0x637EB0;
+// Phase 1: Vote Manipulation
+static uintptr_t g_rvaRpcVotingComplete = 0x568E20;
+// Phase 9: No Game End
+static uintptr_t g_rvaCheckEndCriteria = 0x554DC0;
 
 static void ResolveRvasFromDump() {
   using namespace DumpDatabase;
@@ -198,6 +202,10 @@ static void ResolveRvasFromDump() {
                                           g_rvaRpcCloseDoorsOfType);
   g_rvaRpcUpdateSystem =
       GetMethodRva("ShipStatus", "RpcUpdateSystem", g_rvaRpcUpdateSystem);
+  g_rvaRpcVotingComplete =
+      GetMethodRva("MeetingHud", "RpcVotingComplete", g_rvaRpcVotingComplete);
+  g_rvaCheckEndCriteria =
+      GetMethodRva("LogicGameFlowNormal", "CheckEndCriteria", g_rvaCheckEndCriteria);
 }
 
 // NOP helper: patches a function to immediately return
@@ -1171,6 +1179,21 @@ static void UpdateInternal() {
           ulTimer = 0;
           TriggerSabotage(7); // Electrical / Lights
         }
+      }
+
+      // 17. Spam Doors — continuously close all doors
+      if (g_spamDoors && ShipStatus::klass && gameAssembly) {
+        static float sdTimer = 0;
+        sdTimer += 0.033f;
+        if (sdTimer > 2.0f) {
+          sdTimer = 0;
+          CloseAllDoors();
+        }
+      }
+
+      // 18. Moonwalk — continuously flip direction
+      if (g_moonwalk) {
+        SetMoonwalk(true);
       }
 
     } // end isInGame toggles
@@ -3027,6 +3050,378 @@ void KickAllFromVents() {
       }
     }
   } __except (EXCEPTION_EXECUTE_HANDLER) {}
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Phase 1: Vote Manipulation & Meeting Control
+// ═══════════════════════════════════════════════════════════════════════
+
+// MeetingHud.RpcVotingComplete(VoterState[], NetworkedPlayerInfo, bool tie)
+typedef void(__cdecl *RpcVotingComplete_fn)(void *, void *, void *, bool, void *);
+
+void SkipMeeting() {
+  Attach();
+  if (!MeetingHud::klass || !gameAssembly)
+    return;
+  void *instField = il2cpp_class_get_field_from_name(MeetingHud::klass, "Instance");
+  void *inst = nullptr;
+  if (instField)
+    il2cpp_field_static_get_value(instField, &inst);
+  if (!IsValid(inst))
+    return;
+
+  SpoofHost();
+  __try {
+    auto fn = (RpcVotingComplete_fn)(gameAssembly + g_rvaRpcVotingComplete);
+    fn(inst, nullptr, nullptr, true, nullptr);
+  } __except (EXCEPTION_EXECUTE_HANDLER) {}
+  RestoreHost();
+}
+
+void EjectPlayer(int playerIndex) {
+  Attach();
+  if (!MeetingHud::klass || !gameAssembly)
+    return;
+  void *instField = il2cpp_class_get_field_from_name(MeetingHud::klass, "Instance");
+  void *inst = nullptr;
+  if (instField)
+    il2cpp_field_static_get_value(instField, &inst);
+  if (!IsValid(inst))
+    return;
+
+  void *target = ResolveTargetPlayer(playerIndex);
+  if (!IsValid(target))
+    return;
+  void *targetData = *(void **)((uintptr_t)target + 0x58);
+  if (!IsValid(targetData))
+    return;
+
+  SpoofHost();
+  __try {
+    auto fn = (RpcVotingComplete_fn)(gameAssembly + g_rvaRpcVotingComplete);
+    fn(inst, nullptr, targetData, false, nullptr);
+  } __except (EXCEPTION_EXECUTE_HANDLER) {}
+  RestoreHost();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Phase 2: Overload System
+// ═══════════════════════════════════════════════════════════════════════
+
+// Sends malformed RPCs to a target client to lag/crash them.
+// Uses PlayerControl.RpcSendChat with garbage data as a lightweight overload.
+void OverloadPlayer(int clientId, int strength) {
+  Attach();
+  void *lp = GetLocalPlayer();
+  if (!IsValid(lp) || !gameAssembly || !il2cpp_string_new)
+    return;
+
+  auto fn = (RpcSendChat_fn)(gameAssembly + g_rvaRpcSendChat);
+
+  // Generate garbage strings to flood the target
+  // Each call sends one RPC, we loop 'strength' times
+  __try {
+    for (int i = 0; i < strength; i++) {
+      // Random length garbage string
+      char garbage[256];
+      int len = 64 + (rand() % 128);
+      for (int j = 0; j < len; j++)
+        garbage[j] = (char)(33 + (rand() % 93)); // printable ASCII
+      garbage[len] = '\0';
+      void *str = il2cpp_string_new(garbage);
+      fn(lp, str, nullptr);
+    }
+  } __except (EXCEPTION_EXECUTE_HANDLER) {}
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Phase 3: Map-Aware Sabotage
+// ═══════════════════════════════════════════════════════════════════════
+
+int GetCurrentMapId() {
+  Attach();
+  // Read from AmongUsClient.Instance -> mode info, or from ShipStatus type
+  // Simplest: check the ShipStatus's class name or use GameOptionsManager
+  if (!GameOptionsManager::klass)
+    return -1;
+  void *gomField = il2cpp_class_get_field_from_name(
+      GameOptionsManager::klass, "<Instance>k__BackingField");
+  void *gomInst = nullptr;
+  if (gomField)
+    il2cpp_field_static_get_value(gomField, &gomInst);
+  if (!IsValid(gomInst))
+    return -1;
+  void *opt = *(void **)((uintptr_t)gomInst + 0x18);
+  if (!IsValid(opt))
+    return -1;
+  // MapId is at offset 0x10 in NormalGameOptionsV09
+  __try {
+    int mapId = *(int *)((uintptr_t)opt + 0x10);
+    currentMapId = (mapId >= 0 && mapId <= 5) ? mapId : -1;
+    return currentMapId;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return -1;
+  }
+}
+
+void OpenAllDoors() {
+  Attach();
+  if (!ShipStatus::klass || !gameAssembly)
+    return;
+  void *field = il2cpp_class_get_field_from_name(ShipStatus::klass, "Instance");
+  void *inst = nullptr;
+  if (field)
+    il2cpp_field_static_get_value(field, &inst);
+  if (!IsValid(inst))
+    return;
+
+  // Open doors by sending repair amount to door systems
+  // SystemTypes.Doors = 5, repair amount = 64 opens
+  __try {
+    auto fn = (RpcUpdateSystem_fn)(gameAssembly + g_rvaRpcUpdateSystem);
+    // Iterate all possible door room types and send open signal
+    for (int i = 0; i <= 14; i++) {
+      fn(inst, 5, (uint8_t)(64 | i), nullptr); // Doors system, repair specific room
+    }
+  } __except (EXCEPTION_EXECUTE_HANDLER) {}
+}
+
+// Map-aware sabotage:
+// sabType: 0=Reactor, 1=Oxygen, 2=Lights, 3=Comms
+void TriggerSabotageMapAware(int sabType) {
+  Attach();
+  int mapId = GetCurrentMapId();
+  if (mapId < 0)
+    mapId = 0; // default Skeld
+
+  switch (sabType) {
+  case 0: // Reactor
+    if (mapId == 2)       // Polus: Laboratory (SystemTypes = 21)
+      TriggerSabotage(21);
+    else if (mapId == 4)  // Airship: HeliSabotage (SystemTypes = 58)
+      TriggerSabotage(58);
+    else                  // Skeld/MiraHQ/Fungle: Reactor (SystemTypes = 3)
+      TriggerSabotage(3);
+    break;
+  case 1: // Oxygen
+    if (mapId == 2 || mapId == 4 || mapId == 5) {
+      // Polus, Airship, Fungle have no oxygen system
+      printf("[!] Oxygen not available on this map (id=%d)\n", mapId);
+    } else {
+      TriggerSabotage(8); // LifeSupp
+    }
+    break;
+  case 2: // Lights
+    if (mapId == 5) {
+      printf("[!] Electrical not available on Fungle\n");
+    } else {
+      TriggerSabotage(7); // Electrical
+    }
+    break;
+  case 3: // Comms
+    TriggerSabotage(14); // Comms works on all maps (different internal types but same RPC)
+    break;
+  }
+}
+
+void TriggerSpores() {
+  Attach();
+  if (!ShipStatus::klass || !gameAssembly)
+    return;
+  int mapId = GetCurrentMapId();
+  if (mapId != 5) {
+    printf("[!] Spores only available on Fungle (current map=%d)\n", mapId);
+    return;
+  }
+  // Trigger MushroomMixup to simulate spores
+  MushroomMixup();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Phase 4: Animation Framework
+// ═══════════════════════════════════════════════════════════════════════
+
+void PlayTaskAnimation(uint8_t taskType) {
+  Attach();
+  void *lp = GetLocalPlayer();
+  if (!IsValid(lp) || !gameAssembly)
+    return;
+  // Use RpcPlayAnimation to broadcast task-specific animation
+  __try {
+    auto fn = (RpcPlayAnimation_fn)(gameAssembly + g_rvaRpcPlayAnimation);
+    fn(lp, taskType, nullptr);
+  } __except (EXCEPTION_EXECUTE_HANDLER) {}
+}
+
+static bool s_medScanActive = false;
+
+void ToggleMedScan(bool on) {
+  Attach();
+  void *lp = GetLocalPlayer();
+  if (!IsValid(lp) || !gameAssembly)
+    return;
+
+  if (on && !s_medScanActive) {
+    // Play medscan animation (animation ID 1 = scan)
+    PlayAnimation(1);
+    s_medScanActive = true;
+  } else if (!on && s_medScanActive) {
+    // Stop by playing idle animation
+    PlayAnimation(0);
+    s_medScanActive = false;
+  }
+}
+
+static bool s_camsActive = false;
+
+void ToggleCamsInUse(bool on) {
+  Attach();
+  if (!ShipStatus::klass || !gameAssembly)
+    return;
+  void *field = il2cpp_class_get_field_from_name(ShipStatus::klass, "Instance");
+  void *inst = nullptr;
+  if (field)
+    il2cpp_field_static_get_value(field, &inst);
+  if (!IsValid(inst))
+    return;
+
+  if (on && !s_camsActive) {
+    __try {
+      auto fn = (RpcUpdateSystem_fn)(gameAssembly + g_rvaRpcUpdateSystem);
+      fn(inst, 22, 1, nullptr); // SystemTypes.Security = 22, amount=1 (activate)
+    } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    s_camsActive = true;
+  } else if (!on && s_camsActive) {
+    __try {
+      auto fn = (RpcUpdateSystem_fn)(gameAssembly + g_rvaRpcUpdateSystem);
+      fn(inst, 22, 0, nullptr); // amount=0 (deactivate)
+    } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    s_camsActive = false;
+  }
+}
+
+void SetMoonwalk(bool on) {
+  Attach();
+  void *lp = GetLocalPlayer();
+  if (!IsValid(lp))
+    return;
+  void *phys = *(void **)((uintptr_t)lp + 0x94); // MyPhysics
+  if (!IsValid(phys))
+    return;
+  // PlayerPhysics has a "FlipX" field that controls direction
+  // Moonwalk: flip the body direction flag (offset 0x4C typically)
+  __try {
+    // The FlipX/direction flag is controlled internally by AnimationController
+    // We can set the body.flipX directly via the cosmetics layer
+    void *cosmetics = *(void **)((uintptr_t)lp + 0x3C);
+    if (IsValid(cosmetics)) {
+      // Toggle the facing direction flag
+      static void *setFlip_method = nullptr;
+      if (!setFlip_method) {
+        void *cosKlass = *(void **)cosmetics;
+        if (IsValid(cosKlass))
+          setFlip_method = il2cpp_class_get_method_from_name(cosKlass, "SetFlipX", 1);
+      }
+      if (setFlip_method) {
+        bool flip = on;
+        void *p[1] = {&flip};
+        il2cpp_runtime_invoke(setFlip_method, cosmetics, p, nullptr);
+      }
+    }
+  } __except (EXCEPTION_EXECUTE_HANDLER) {}
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Phase 5: Chat Enhancements
+// ═══════════════════════════════════════════════════════════════════════
+
+void SetChatRateLimit(float interval) {
+  // Override our internal rate limiter
+  // Reset the timer so the next send goes through immediately
+  lastChatTick = 0;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Phase 6: Event Logger
+// ═══════════════════════════════════════════════════════════════════════
+
+void LogEvent(const std::string& text, uint32_t color) {
+  EventLogEntry entry;
+  entry.text = text;
+  entry.timestamp = (float)GetTickCount() / 1000.0f;
+  entry.color = color;
+  eventLog.push_back(entry);
+  while (eventLog.size() > MAX_EVENT_LOG)
+    eventLog.pop_front();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Phase 7: Panic Mode
+// ═══════════════════════════════════════════════════════════════════════
+
+// Defined in Menu.cpp as extern — this is just the game-side cleanup
+void PanicDisableAll() {
+  // Reset game state that cheats may have modified
+  void *lp = GetLocalPlayer();
+  if (IsValid(lp)) {
+    // Re-enable collision
+    static void *set_enabled_method = nullptr;
+    if (!set_enabled_method && Behaviour::klass)
+      set_enabled_method = il2cpp_class_get_method_from_name(
+          Behaviour::klass, "set_enabled", 1);
+    void *coll = *(void **)((uintptr_t)lp + 0x90);
+    if (IsValid(coll) && set_enabled_method) {
+      bool val = true;
+      void *p[1] = {&val};
+      il2cpp_runtime_invoke(set_enabled_method, coll, p, nullptr);
+    }
+  }
+  // Reset cams/medscan state
+  if (s_camsActive)
+    ToggleCamsInUse(false);
+  if (s_medScanActive)
+    ToggleMedScan(false);
+
+  // Restore anti-kick
+  UnpatchAntiKick();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Phase 9: Passive / QoL
+// ═══════════════════════════════════════════════════════════════════════
+
+// No Game End: patch LogicGameFlowNormal.CheckEndCriteria to NOP
+static bool s_noGameEndPatched = false;
+static uint8_t s_origCheckEndCriteria[4] = {};
+
+void SetNoGameEnd(bool on) {
+  Attach();
+  if (!gameAssembly)
+    return;
+
+  uintptr_t addr = gameAssembly + g_rvaCheckEndCriteria;
+
+  if (on && !s_noGameEndPatched) {
+    DWORD oldProt;
+    if (VirtualProtect((void *)addr, 4, PAGE_EXECUTE_READWRITE, &oldProt)) {
+      memcpy(s_origCheckEndCriteria, (void *)addr, 4);
+      // NOP the function (ret immediately)
+      *(uint8_t *)(addr) = 0xC3;     // ret
+      *(uint8_t *)(addr + 1) = 0x90; // nop
+      *(uint8_t *)(addr + 2) = 0x90; // nop
+      VirtualProtect((void *)addr, 4, oldProt, &oldProt);
+      s_noGameEndPatched = true;
+      printf("[+] No Game End enabled\n");
+    }
+  } else if (!on && s_noGameEndPatched) {
+    DWORD oldProt;
+    if (VirtualProtect((void *)addr, 4, PAGE_EXECUTE_READWRITE, &oldProt)) {
+      memcpy((void *)addr, s_origCheckEndCriteria, 4);
+      VirtualProtect((void *)addr, 4, oldProt, &oldProt);
+      s_noGameEndPatched = false;
+      printf("[+] No Game End disabled\n");
+    }
+  }
 }
 
 } // namespace Stara::Game

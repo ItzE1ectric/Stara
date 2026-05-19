@@ -2,6 +2,7 @@
 #include "Common.hpp"
 #include <vector>
 #include <string>
+#include <deque>
 
 namespace Stara::Game {
     // IL2CPP Types
@@ -32,10 +33,12 @@ namespace Stara::Game {
     inline int localLevel = 0;
     inline std::string localRoleName = "Unknown";
     inline int localColorId = -1;
+    inline int currentMapId = -1; // Phase 3: map-aware sabotage
 
     struct PlayerInfo {
         std::string name;
         int playerId;
+        int clientId;   // For overload targeting
         float x, y;
         bool hasWorldPos;
         bool isImpostor;
@@ -52,6 +55,15 @@ namespace Stara::Game {
         float x, y;
     };
     inline std::vector<VentInfo> vents;
+
+    // Event log (Phase 6)
+    struct EventLogEntry {
+        std::string text;
+        float timestamp;
+        uint32_t color; // ImU32
+    };
+    inline std::deque<EventLogEntry> eventLog;
+    inline const size_t MAX_EVENT_LOG = 200;
 
     // IL2CPP Functions
     inline il2cpp_domain_get_t il2cpp_domain_get;
@@ -84,6 +96,8 @@ namespace Stara::Game {
     namespace RoleBehaviour { inline void* klass = nullptr; }
     namespace MeetingHud { inline void* klass = nullptr; }
     namespace Vent { inline void* klass = nullptr; }
+    namespace ChatController { inline void* klass = nullptr; }
+    namespace HudManager { inline void* klass = nullptr; }
 
     // Core Functions
     bool Init();
@@ -109,7 +123,7 @@ namespace Stara::Game {
     void SetCharacterScale(float scale);
     void PlayAnimation(uint8_t animId);
     
-    // New Cheats
+    // Existing Cheats
     void SpamChat(const char* text);
     void EndGame();
     void StartGame();
@@ -145,5 +159,52 @@ namespace Stara::Game {
     void TriggerSabotage(int systemType);
     void MushroomMixup();
     void KickAllFromVents();
+
+    // ═══════════════════════════════════════════════════════
+    // Phase 1: Vote Manipulation & Meeting Control
+    // ═══════════════════════════════════════════════════════
+    void SkipMeeting();                       // Host: RpcVotingComplete with skip
+    void EjectPlayer(int playerIndex);        // Host: RpcVotingComplete with target
+
+    // ═══════════════════════════════════════════════════════
+    // Phase 2: Overload System
+    // ═══════════════════════════════════════════════════════
+    void OverloadPlayer(int clientId, int strength);  // Send malformed RPCs
+
+    // ═══════════════════════════════════════════════════════
+    // Phase 3: Map-Aware Sabotage
+    // ═══════════════════════════════════════════════════════
+    int  GetCurrentMapId();                   // Read map ID from ShipStatus
+    void OpenAllDoors();                      // Counterpart to CloseAllDoors
+    void TriggerSabotageMapAware(int sabType);// Map-aware reactor/O2/comms
+    void TriggerSpores();                     // Fungle: trigger all spores
+
+    // ═══════════════════════════════════════════════════════
+    // Phase 4: Animation Framework
+    // ═══════════════════════════════════════════════════════
+    void PlayTaskAnimation(uint8_t taskType); // Shields/Asteroids/Garbage
+    void ToggleMedScan(bool on);              // ForceSetScanner
+    void ToggleCamsInUse(bool on);            // Security system 1/0
+    void SetMoonwalk(bool on);                // Flip movement direction
+
+    // ═══════════════════════════════════════════════════════
+    // Phase 5: Chat Enhancements
+    // ═══════════════════════════════════════════════════════
+    void SetChatRateLimit(float interval);    // Modify chat cooldown
+
+    // ═══════════════════════════════════════════════════════
+    // Phase 6: Event Logger
+    // ═══════════════════════════════════════════════════════
+    void LogEvent(const std::string& text, uint32_t color = 0xFFFFFFFF);
+
+    // ═══════════════════════════════════════════════════════
+    // Phase 7: Panic Mode
+    // ═══════════════════════════════════════════════════════
+    void PanicDisableAll();                   // Kill all toggles instantly
+
+    // ═══════════════════════════════════════════════════════
+    // Phase 9: Passive / QoL
+    // ═══════════════════════════════════════════════════════
+    void SetNoGameEnd(bool on);               // Suppress EndGame RPC (host)
 
 } // namespace Stara::Game

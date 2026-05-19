@@ -139,4 +139,15 @@ extern int g_spectateTarget;
 extern float g_customDiscussTime, g_customVoteTime;
 extern char g_chatBuf[128];
 
+// Phase 1-9: MalumMenu Ported Feature Toggles
+extern bool g_revealVotes;                              // Phase 1: Vote reveal
+extern bool g_spamDoors;                                // Phase 3: Auto-close doors
+extern bool g_moonwalk, g_medScan, g_camsInUse;         // Phase 4: Animations
+extern bool g_alwaysChatEnabled;                        // Phase 5: Chat
+extern bool g_eventLogVisible;                          // Phase 6: Event log
+extern bool g_panicMode, g_stealthMode;                 // Phase 7: Panic/Stealth
+extern bool g_minimapEsp;                               // Phase 8: Minimap
+extern bool g_invertControls, g_noGameEnd;              // Phase 9: QoL
+extern bool g_distanceTracers, g_freeCosmetics;         // Phase 9: QoL
+
 } // namespace Stara
