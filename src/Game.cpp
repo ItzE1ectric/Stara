@@ -2325,8 +2325,17 @@ void SetRole(int roleType) {
   void *lp = GetLocalPlayer();
   if (!IsValid(lp))
     return;
-  // LOCAL ONLY — gives you abilities without telling the server (no kick)
+  // Apply locally first for instant visual feedback
   SetFakeRoleLocal(lp, roleType);
+  // Also broadcast via RPC so the server knows (host-spoofed)
+  if (gameAssembly) {
+    SpoofHost();
+    __try {
+      auto fn = (RpcSetRole_fn)(gameAssembly + g_rvaRpcSetRole);
+      fn(lp, (uint16_t)roleType, true, nullptr);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    RestoreHost();
+  }
   isImpostor =
       (roleType == 1 || roleType == 5 || roleType == 7 || roleType == 9 || roleType == 18);
 }
