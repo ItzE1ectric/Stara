@@ -816,10 +816,11 @@ static bool Toggle(const char *label, bool *v) {
   if (w->SkipItems)
     return false;
   ImGuiID id = w->GetID(label);
-  float h = 22.f, wd = 44.f, r = h * .5f;
+  const float h = 20.f, wd = 38.f, r = h * .5f;
+  const float knobR = r - 2.f;
   ImVec2 p = w->DC.CursorPos;
   ImVec2 ls = ImGui::CalcTextSize(label);
-  ImRect bb(p, ImVec2(p.x + wd + 8 + ls.x, p.y + std::max(h, ls.y)));
+  ImRect bb(p, ImVec2(p.x + wd + 10 + ls.x, p.y + std::max(h, ls.y)));
   ImGui::ItemSize(bb);
   if (!ImGui::ItemAdd(bb, id))
     return false;
@@ -829,103 +830,138 @@ static bool Toggle(const char *label, bool *v) {
     *v = !*v;
   float &ta = g_toggleAnim[id];
   float tgt = *v ? 1.f : 0.f;
-  ta = Damp(ta, tgt, 12.f);
+  float speed = ImGui::GetIO().DeltaTime * 10.f;
+  float diff = tgt - ta;
+  ta += diff * std::min(1.f, speed) * (1.f + (1.f - powf(1.f - fabsf(diff), 3.f)) * 2.f);
+  if (fabsf(diff) < 0.005f) ta = tgt;
   ImDrawList *dl = w->DrawList;
   ImVec4 ac = Accent();
-  ImU32 offBg = IM_COL32(34, 40, 56, 220);
-  ImU32 onBg = ScaledAccent(ac, 0.58f, 220);
+  ImU32 offBg = IM_COL32(30, 35, 50, 200);
+  ImU32 onBg = IM_COL32((int)(ac.x*200), (int)(ac.y*200), (int)(ac.z*200), 210);
   ImU32 bg = ImGui::ColorConvertFloat4ToU32(
       ImLerp(ImGui::ColorConvertU32ToFloat4(offBg),
              ImGui::ColorConvertU32ToFloat4(onBg), ta));
   dl->AddRectFilled(p, {p.x + wd, p.y + h}, bg, r);
-  dl->AddRect(p, {p.x + wd, p.y + h},
-              hov ? ScaledAccent(ac, 0.85f, 170) : IM_COL32(60, 70, 95, 140), r,
-              0, 1.f);
+  dl->AddRectFilled(p, {p.x + wd, p.y + 3.f},
+                    IM_COL32(0, 0, 0, (int)(40*(1.f-ta))), r,
+                    ImDrawFlags_RoundCornersTop);
   float kx = p.x + r + (wd - h) * ta;
-  dl->AddCircleFilled({kx, p.y + r}, r - 2.5f,
-                      IM_COL32(240, 246, 255, hov ? 255 : 238), 24);
-  if (ta > 0.01f) {
-    dl->AddCircle({kx, p.y + r}, r + 1.2f,
-                  ScaledAccent(ac, 1.1f, (int)(110 * ta)), 24, 1.2f);
+  float ky = p.y + r;
+  if (ta > 0.02f) {
+    for (int ring = 3; ring > 0; ring--) {
+      float grow = ring * 1.8f;
+      int a = (int)(28 * ta * (4 - ring));
+      dl->AddCircleFilled({kx, ky}, knobR + grow,
+                          IM_COL32((int)(ac.x*255),(int)(ac.y*255),
+                                   (int)(ac.z*255), a), 24);
+    }
   }
-  dl->AddText({p.x + wd + 8, p.y + (h - ls.y) * .5f},
-              hov ? IM_COL32(250, 250, 255, 255) : Colors::TextPrimary, label);
+  dl->AddCircleFilled({kx, ky + 0.5f}, knobR, IM_COL32(0,0,0,35), 24);
+  dl->AddCircleFilled({kx, ky}, knobR,
+                      hov ? IM_COL32(255,255,255,255) : IM_COL32(240,243,248,245), 24);
+  ImU32 textCol = hov ? IM_COL32(235,240,250,255) : IM_COL32(180,190,210,230);
+  if (*v) textCol = IM_COL32(226,232,240,255);
+  dl->AddText({p.x + wd + 10, p.y + (h - ls.y) * .5f}, textCol, label);
   return press;
 }
 
 static bool GlowBtn(const char *label, ImVec2 sz = {0, 0}) {
-  ImGuiID id = ImGui::GetCurrentWindow()->GetID(label);
+  ImGuiWindow *w = ImGui::GetCurrentWindow();
+  if (w->SkipItems)
+    return false;
+  ImGuiID id = w->GetID(label);
   float &ha = g_buttonAnim[id];
+  ImVec2 ls = ImGui::CalcTextSize(label);
+  if (sz.x <= 0) sz.x = ls.x + 24.f;
+  if (sz.y <= 0) sz.y = 28.f;
+  ImVec2 p = w->DC.CursorPos;
+  ImRect bb(p, {p.x + sz.x, p.y + sz.y});
+  ImGui::ItemSize(bb);
+  if (!ImGui::ItemAdd(bb, id))
+    return false;
+  bool hov, held;
+  bool press = ImGui::ButtonBehavior(bb, id, &hov, &held);
+  ha = Damp(ha, held ? 1.3f : (hov ? 1.f : 0.f), 16.f);
+  ImDrawList *dl = w->DrawList;
   ImVec4 ac = Accent();
-  ImVec4 base = {ac.x * .16f, ac.y * .16f, ac.z * .18f, .88f};
-  ImVec4 hovc = {ac.x * .30f, ac.y * .28f, ac.z * .32f, .96f};
-  ImVec4 actv = {ac.x * .44f, ac.y * .40f, ac.z * .46f, 1.f};
-  ImGui::PushStyleColor(ImGuiCol_Button,
-                        ImLerp(base, hovc, std::clamp(ha * 0.7f, 0.f, 1.f)));
-  ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hovc);
-  ImGui::PushStyleColor(ImGuiCol_ButtonActive, actv);
-  bool r = ImGui::Button(label, sz);
-  bool hovered = ImGui::IsItemHovered();
-  bool active = ImGui::IsItemActive();
-  ha = Damp(ha, active ? 1.2f : (hovered ? 1.f : 0.f), 14.f);
-  ImVec2 mn = ImGui::GetItemRectMin();
-  ImVec2 mx = ImGui::GetItemRectMax();
-  ImDrawList *dl = ImGui::GetWindowDrawList();
+  float rnd = sz.y * 0.38f;
   if (ha > 0.01f) {
-    int a = (int)(75.f * std::clamp(ha, 0.f, 1.2f));
-    dl->AddRect({mn.x - 1.f, mn.y - 1.f}, {mx.x + 1.f, mx.y + 1.f},
-                ScaledAccent(ac, 1.05f, a), 8.f, 0, 1.15f);
+    for (int i = 2; i > 0; i--) {
+      float grow = i * 2.2f;
+      int a = (int)(22 * ha * (3 - i));
+      dl->AddRect({p.x-grow, p.y-grow}, {p.x+sz.x+grow, p.y+sz.y+grow},
+                  IM_COL32((int)(ac.x*255),(int)(ac.y*255),(int)(ac.z*255), a),
+                  rnd + grow*0.3f, 0, 1.f);
+    }
   }
-  ImGui::PopStyleColor(3);
-  return r;
+  ImU32 topCol = IM_COL32((int)(ac.x*48+14),(int)(ac.y*48+14),
+                          (int)(ac.z*54+16), 210+(int)(45*ha));
+  ImU32 botCol = IM_COL32((int)(ac.x*28+8),(int)(ac.y*28+8),
+                          (int)(ac.z*32+10), 200+(int)(55*ha));
+  dl->AddRectFilledMultiColor(p, {p.x+sz.x,p.y+sz.y}, topCol, topCol, botCol, botCol);
+  dl->AddRectFilledMultiColor(
+      {p.x+4.f,p.y}, {p.x+sz.x-4.f,p.y+1.f},
+      IM_COL32(255,255,255,(int)(18+22*ha)), IM_COL32(255,255,255,(int)(8+12*ha)),
+      IM_COL32(255,255,255,0), IM_COL32(255,255,255,0));
+  dl->AddRect(p, {p.x+sz.x,p.y+sz.y},
+              IM_COL32((int)(ac.x*120+30),(int)(ac.y*120+30),
+                       (int)(ac.z*130+35), 80+(int)(60*ha)),
+              rnd, 0, 0.8f);
+  ImVec2 tp = {p.x+(sz.x-ls.x)*0.5f, p.y+(sz.y-ls.y)*0.5f};
+  dl->AddText(tp, IM_COL32(226,232,240,230+(int)(25*ha)), label);
+  return press;
 }
 
 static bool Slider(const char *l, float *v, float mn, float mx,
                    const char *fmt = "%.1f") {
   ImVec4 ac = Accent();
-  ImGui::PushStyleColor(ImGuiCol_SliderGrab, ac);
-  ImGui::PushStyleColor(ImGuiCol_SliderGrabActive,
-                        {ac.x * 1.3f, ac.y * 1.3f, ac.z * 1.3f, 1});
-  ImGui::PushStyleColor(ImGuiCol_FrameBg, {.08f, .08f, .14f, .8f});
+  ImGui::PushStyleColor(ImGuiCol_SliderGrab, {ac.x*.9f, ac.y*.9f, ac.z*.9f, 1.f});
+  ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, {ac.x*1.15f, ac.y*1.15f, ac.z*1.15f, 1.f});
+  ImGui::PushStyleColor(ImGuiCol_FrameBg, {.06f,.07f,.11f,.75f});
+  ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, {.08f,.09f,.14f,.85f});
+  ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.f);
+  ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding, 10.f);
+  ImGui::PushStyleVar(ImGuiStyleVar_GrabMinSize, 14.f);
   bool c = ImGui::SliderFloat(l, v, mn, mx, fmt);
-  ImGui::PopStyleColor(3);
+  ImGui::PopStyleVar(3);
+  ImGui::PopStyleColor(4);
   return c;
 }
 
 static void Card(const char *title) {
-  ImGui::PushStyleColor(ImGuiCol_ChildBg, {.05f, .07f, .12f, .82f});
-  ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 12.f);
-  ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.f);
+  ImGui::PushStyleColor(ImGuiCol_ChildBg, {.042f,.055f,.09f,.78f});
+  ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 10.f);
+  ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 0.8f);
   ImGui::BeginChild(title, {0, 0},
                     ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_Borders |
                         ImGuiChildFlags_AlwaysUseWindowPadding);
   ImDrawList *dl = ImGui::GetWindowDrawList();
   ImVec2 p = ImGui::GetWindowPos(), s = ImGui::GetWindowSize();
   ImVec4 ac = Accent();
-  float t = (float)ImGui::GetTime();
-  float pulse = 0.55f + 0.45f * sinf(t * 2.6f);
-  dl->AddRectFilled(p, {p.x + s.x, p.y + s.y}, IM_COL32(8, 12, 20, 90), 12.f);
-  dl->AddRect(p, {p.x + s.x, p.y + s.y}, IM_COL32(65, 88, 124, 105), 12.f, 0,
-              1.f);
-  dl->AddRectFilledMultiColor(p, {p.x + s.x, p.y + 3},
-                              ScaledAccent(ac, 1.0f, (int)(140 * pulse)),
-                              IM_COL32(255, 105, 148, (int)(65 * pulse)),
-                              IM_COL32(255, 105, 148, (int)(65 * pulse)),
-                              ScaledAccent(ac, 1.0f, (int)(140 * pulse)));
-  dl->AddCircleFilled({p.x + s.x - 14.f, p.y + 12.f}, 2.1f,
-                      ScaledAccent(ac, 1.15f, 180), 10);
-  ImGui::TextColored({.94f, .94f, 1, 1}, "%s", title);
-  ImGui::Dummy({0, 3});
-  dl->AddLine({p.x + 11.f, p.y + 28.f}, {p.x + s.x - 11.f, p.y + 28.f},
-              IM_COL32(56, 72, 104, 120), 1.f);
-  ImGui::Dummy({0, 6});
+  dl->AddRectFilled(p, {p.x+s.x,p.y+s.y}, IM_COL32(6,10,18,60), 10.f);
+  dl->AddRect(p, {p.x+s.x,p.y+s.y}, IM_COL32(40,52,75,70), 10.f, 0, 0.7f);
+  dl->AddRectFilledMultiColor(
+      p, {p.x+s.x, p.y+2.f},
+      IM_COL32((int)(ac.x*200),(int)(ac.y*200),(int)(ac.z*200),120),
+      IM_COL32((int)(ac.x*100),(int)(ac.y*100),(int)(ac.z*120),40),
+      IM_COL32(0,0,0,0), IM_COL32(0,0,0,0));
+  ImGui::TextColored({.88f,.91f,.96f,1.f}, "%s", title);
+  ImGui::Dummy({0, 1});
+  float sepY = ImGui::GetCursorScreenPos().y - 1.f;
+  dl->AddRectFilledMultiColor(
+      {p.x+10.f,sepY}, {p.x+s.x-10.f,sepY+1.f},
+      IM_COL32(60,75,100,80), IM_COL32(40,52,70,30),
+      IM_COL32(40,52,70,30), IM_COL32(60,75,100,80));
+  ImGui::Dummy({0, 4});
 }
 static void EndCard() {
   ImGui::EndChild();
   ImGui::PopStyleVar(2);
   ImGui::PopStyleColor();
-  ImGui::Dummy({0, 6});
+  ImGui::Dummy({0, 4});
 }
+
+
 
 static void Sep(const char *t) {
   ImGui::Dummy({0, 2});
@@ -2414,58 +2450,57 @@ static void TabSettings() {
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 static void ApplyTheme() {
   ImGuiStyle &s = ImGui::GetStyle();
-  s.WindowPadding = {12, 10};
-  s.FramePadding = {9, 5};
-  s.ItemSpacing = {8, 6};
-  s.ItemInnerSpacing = {7, 5};
-  s.ScrollbarSize = 11;
+  s.WindowPadding = {14, 10};
+  s.FramePadding = {10, 5};
+  s.ItemSpacing = {8, 5};
+  s.ItemInnerSpacing = {7, 4};
+  s.ScrollbarSize = 8;
   s.IndentSpacing = 18.f;
-  s.WindowBorderSize = 1.f;
-  s.ChildBorderSize = 1.f;
-  s.FrameBorderSize = 1.f;
-  s.WindowRounding = 11.f;
+  s.WindowBorderSize = 0.8f;
+  s.ChildBorderSize = 0.6f;
+  s.FrameBorderSize = 0.f;
+  s.WindowRounding = 12.f;
   s.ChildRounding = 10.f;
-  s.FrameRounding = 7.f;
-  s.PopupRounding = 9.f;
+  s.FrameRounding = 8.f;
+  s.PopupRounding = 10.f;
   s.ScrollbarRounding = 12.f;
-  s.GrabRounding = 6.f;
-  s.TabRounding = 7.f;
+  s.GrabRounding = 8.f;
+  s.TabRounding = 8.f;
   ImVec4 *c = s.Colors;
-  c[ImGuiCol_WindowBg] = {.028f, .036f, .062f, .96f};
+  c[ImGuiCol_WindowBg] = {.039f, .055f, .098f, .95f};
   c[ImGuiCol_ChildBg] = {0.f, 0.f, 0.f, 0.f};
-  c[ImGuiCol_PopupBg] = {.046f, .055f, .084f, .97f};
-  c[ImGuiCol_Border] = {.28f, .34f, .48f, .58f};
-  c[ImGuiCol_FrameBg] = {.075f, .098f, .152f, .86f};
-  c[ImGuiCol_FrameBgHovered] = {.105f, .132f, .195f, .94f};
-  c[ImGuiCol_FrameBgActive] = {.12f, .152f, .22f, 1.f};
-  c[ImGuiCol_TitleBg] = {.03f, .042f, .07f, .98f};
-  c[ImGuiCol_TitleBgActive] = {.042f, .056f, .09f, .98f};
-  c[ImGuiCol_ScrollbarBg] = {.032f, .04f, .062f, .6f};
-  c[ImGuiCol_ScrollbarGrab] = {.27f, .34f, .47f, .7f};
-  c[ImGuiCol_ScrollbarGrabHovered] = {.34f, .43f, .58f, .82f};
-  c[ImGuiCol_ScrollbarGrabActive] = {.42f, .52f, .7f, .9f};
-  c[ImGuiCol_Text] = {.95f, .97f, 1.f, 1.f};
-  c[ImGuiCol_TextDisabled] = {.58f, .64f, .75f, .95f};
+  c[ImGuiCol_PopupBg] = {.035f, .048f, .082f, .97f};
+  c[ImGuiCol_Border] = {.118f, .161f, .231f, .45f};
+  c[ImGuiCol_FrameBg] = {.055f, .07f, .12f, .82f};
+  c[ImGuiCol_FrameBgHovered] = {.07f, .09f, .15f, .90f};
+  c[ImGuiCol_FrameBgActive] = {.085f, .11f, .18f, 1.f};
+  c[ImGuiCol_TitleBg] = {.025f, .035f, .065f, .98f};
+  c[ImGuiCol_TitleBgActive] = {.035f, .048f, .08f, .98f};
+  c[ImGuiCol_ScrollbarBg] = {.025f, .035f, .06f, .4f};
+  c[ImGuiCol_ScrollbarGrab] = {.2f, .26f, .38f, .55f};
+  c[ImGuiCol_ScrollbarGrabHovered] = {.28f, .36f, .5f, .7f};
+  c[ImGuiCol_ScrollbarGrabActive] = {.35f, .44f, .6f, .85f};
+  c[ImGuiCol_Text] = {.886f, .91f, .94f, 1.f};
+  c[ImGuiCol_TextDisabled] = {.58f, .64f, .72f, .8f};
   ImVec4 ac = Accent();
   c[ImGuiCol_CheckMark] = ac;
   c[ImGuiCol_SliderGrab] = ac;
-  c[ImGuiCol_SliderGrabActive] = {ac.x * 1.18f, ac.y * 1.18f, ac.z * 1.18f,
-                                  1.f};
-  c[ImGuiCol_Button] = {ac.x * .17f, ac.y * .17f, ac.z * .19f, .9f};
-  c[ImGuiCol_ButtonHovered] = {ac.x * .27f, ac.y * .27f, ac.z * .3f, .98f};
-  c[ImGuiCol_ButtonActive] = {ac.x * .4f, ac.y * .38f, ac.z * .43f, 1.f};
-  c[ImGuiCol_Header] = {ac.x * .16f, ac.y * .16f, ac.z * .18f, .7f};
-  c[ImGuiCol_HeaderHovered] = {ac.x * .23f, ac.y * .23f, ac.z * .27f, .86f};
-  c[ImGuiCol_HeaderActive] = {ac.x * .3f, ac.y * .3f, ac.z * .34f, .98f};
-  c[ImGuiCol_Separator] = {.26f, .32f, .45f, .5f};
-  c[ImGuiCol_TableHeaderBg] = {.074f, .098f, .15f, .92f};
-  c[ImGuiCol_TableBorderStrong] = {.26f, .31f, .45f, .7f};
-  c[ImGuiCol_TableBorderLight] = {.2f, .25f, .37f, .5f};
-  c[ImGuiCol_TableRowBg] = {.04f, .05f, .08f, .14f};
-  c[ImGuiCol_TableRowBgAlt] = {.06f, .08f, .12f, .23f};
-  c[ImGuiCol_ResizeGrip] = {ac.x * .2f, ac.y * .2f, ac.z * .24f, .5f};
-  c[ImGuiCol_ResizeGripHovered] = {ac.x * .34f, ac.y * .34f, ac.z * .4f, .82f};
-  c[ImGuiCol_ResizeGripActive] = {ac.x * .44f, ac.y * .44f, ac.z * .52f, 1.f};
+  c[ImGuiCol_SliderGrabActive] = {ac.x * 1.15f, ac.y * 1.15f, ac.z * 1.15f, 1.f};
+  c[ImGuiCol_Button] = {ac.x * .12f, ac.y * .12f, ac.z * .14f, .85f};
+  c[ImGuiCol_ButtonHovered] = {ac.x * .22f, ac.y * .22f, ac.z * .26f, .95f};
+  c[ImGuiCol_ButtonActive] = {ac.x * .34f, ac.y * .32f, ac.z * .38f, 1.f};
+  c[ImGuiCol_Header] = {ac.x * .12f, ac.y * .12f, ac.z * .14f, .6f};
+  c[ImGuiCol_HeaderHovered] = {ac.x * .18f, ac.y * .18f, ac.z * .22f, .8f};
+  c[ImGuiCol_HeaderActive] = {ac.x * .25f, ac.y * .25f, ac.z * .3f, .95f};
+  c[ImGuiCol_Separator] = {.12f, .16f, .24f, .4f};
+  c[ImGuiCol_TableHeaderBg] = {.05f, .065f, .1f, .9f};
+  c[ImGuiCol_TableBorderStrong] = {.15f, .2f, .3f, .5f};
+  c[ImGuiCol_TableBorderLight] = {.1f, .14f, .22f, .4f};
+  c[ImGuiCol_TableRowBg] = {.03f, .04f, .065f, .12f};
+  c[ImGuiCol_TableRowBgAlt] = {.04f, .055f, .085f, .18f};
+  c[ImGuiCol_ResizeGrip] = {ac.x * .15f, ac.y * .15f, ac.z * .18f, .4f};
+  c[ImGuiCol_ResizeGripHovered] = {ac.x * .28f, ac.y * .28f, ac.z * .34f, .7f};
+  c[ImGuiCol_ResizeGripActive] = {ac.x * .38f, ac.y * .38f, ac.z * .45f, .95f};
 }
 
 static bool TabMatchesSearch(Tab t) {
@@ -2699,13 +2734,6 @@ void RenderMenu() {
                      IM_COL32(194, 84, 94, 170));
     }
 
-    // Tiny header stars for extra motion
-    float hs = 2.0f + 0.7f * sinf(t * 4.1f);
-    dl->AddCircleFilled({wp.x + ws.x - 104, wp.y + 22}, hs,
-                        IM_COL32(220, 245, 255, (int)(190 * g_menuAlpha)), 10);
-    dl->AddCircleFilled({wp.x + ws.x - 130, wp.y + 17}, hs * 0.7f,
-                        IM_COL32(180, 230, 255, (int)(150 * g_menuAlpha)), 10);
-
     // Footer
     dl->AddRectFilled({wp.x, wp.y + ws.y - 24}, {wp.x + ws.x, wp.y + ws.y},
                       IM_COL32(8, 8, 14, 220), 10,
@@ -2734,14 +2762,14 @@ void RenderMenu() {
       if (!TabMatchesSearch(t))
         continue;
       bool sel = (g_tab == t);
-      float itemH = 42.f;
+      float itemH = 36.f;
       float itemW = sidebarWidth - 6.f;
       ImVec2 cp = ImGui::GetCursorScreenPos();
       ImDrawList *sdl = ImGui::GetWindowDrawList();
       bool preHover =
           ImGui::IsMouseHoveringRect(cp, {cp.x + itemW, cp.y + itemH});
       float &ha = g_hoverAnim[i];
-      ha = Damp(ha, (sel || preHover) ? 1.f : 0.f, 12.f);
+      ha = Damp(ha, (sel || preHover) ? 1.f : 0.f, 14.f);
       ha = std::clamp(ha, 0.f, 1.f);
 
       ImGui::PushID(4000 + i);
@@ -2755,54 +2783,38 @@ void RenderMenu() {
 
       ImU32 tone = TabTone(t, sel ? 240 : (hovered ? 210 : 172));
       if (ha > 0.01f || sel) {
-        int a = sel ? (int)(95 + 45 * ha) : (int)(58 * ha);
+        int a = sel ? (int)(55 + 35 * ha) : (int)(35 * ha);
         sdl->AddRectFilled(cp, {cp.x + itemW, cp.y + itemH},
-                           IM_COL32((int)(ac.x * 255 * .11f),
-                                    (int)(ac.y * 255 * .11f),
-                                    (int)(ac.z * 255 * .13f), a),
+                           IM_COL32((int)(ac.x * 255 * .08f),
+                                    (int)(ac.y * 255 * .08f),
+                                    (int)(ac.z * 255 * .10f), a),
                            8.f);
       }
       if (sel) {
-        sdl->AddRectFilled({cp.x, cp.y + 5.f}, {cp.x + 3.f, cp.y + itemH - 5.f},
+        sdl->AddRectFilled({cp.x, cp.y + 6.f}, {cp.x + 2.5f, cp.y + itemH - 6.f},
                            tone, 2.f);
       }
 
-      ImVec2 iconMin = {cp.x + 7.f, cp.y + 8.f};
-      ImVec2 iconMax = {cp.x + 30.f, cp.y + itemH - 8.f};
+      ImVec2 iconMin = {cp.x + 8.f, cp.y + 6.f};
+      ImVec2 iconMax = {cp.x + 28.f, cp.y + itemH - 6.f};
       sdl->AddRectFilled(iconMin, iconMax,
                          IM_COL32((int)((tone >> IM_COL32_R_SHIFT) & 0xFF),
                                   (int)((tone >> IM_COL32_G_SHIFT) & 0xFF),
                                   (int)((tone >> IM_COL32_B_SHIFT) & 0xFF),
-                                  sel ? 54 : 30),
-                         6.f);
-      sdl->AddRect(iconMin, iconMax, IM_COL32(88, 122, 170, sel ? 170 : 105),
-                   6.f, 0, 1.0f);
+                                  sel ? 40 : 20),
+                         5.f);
       DrawTabGlyph(
           sdl, t,
           {(iconMin.x + iconMax.x) * 0.5f, (iconMin.y + iconMax.y) * 0.5f},
-          12.f, sel ? IM_COL32(238, 248, 255, 250) : tone, 1.2f);
+          11.f, sel ? IM_COL32(235, 245, 255, 250) : tone, 1.1f);
 
-      ImU32 titleCol = sel ? IM_COL32(238, 246, 255, 255)
-                           : (hovered ? IM_COL32(212, 230, 250, 245)
-                                      : IM_COL32(176, 200, 226, 232));
+      ImU32 titleCol = sel ? IM_COL32(226, 232, 240, 255)
+                           : (hovered ? IM_COL32(200, 215, 235, 240)
+                                      : IM_COL32(160, 180, 210, 220));
       ImU32 hintCol =
-          sel ? IM_COL32(150, 193, 232, 245) : IM_COL32(124, 156, 190, 205);
-      sdl->AddText({cp.x + 36.f, cp.y + 6.f}, titleCol, TabName(t));
-      sdl->AddText({cp.x + 36.f, cp.y + 22.f}, hintCol, TabSidebarHint(t));
-
-      const char *tag = TabTag(t);
-      ImVec2 tg = ImGui::CalcTextSize(tag);
-      float pillW = tg.x + 10.f;
-      ImVec2 pillMin = {cp.x + itemW - pillW - 8.f, cp.y + 11.f};
-      ImVec2 pillMax = {pillMin.x + pillW, pillMin.y + 18.f};
-      sdl->AddRectFilled(pillMin, pillMax,
-                         IM_COL32(16, 28, 44, sel ? 210 : 170), 8.f);
-      sdl->AddRect(pillMin, pillMax, IM_COL32(72, 116, 165, sel ? 188 : 130),
-                   8.f, 0, 1.0f);
-      sdl->AddText({pillMin.x + 5.f, pillMin.y + 2.f},
-                   sel ? IM_COL32(232, 244, 255, 250)
-                       : IM_COL32(170, 200, 232, 225),
-                   tag);
+          sel ? IM_COL32(140, 175, 215, 220) : IM_COL32(110, 140, 175, 180);
+      sdl->AddText({cp.x + 34.f, cp.y + 4.f}, titleCol, TabName(t));
+      sdl->AddText({cp.x + 34.f, cp.y + 19.f}, hintCol, TabSidebarHint(t));
     }
     ImGui::EndChild();
 
