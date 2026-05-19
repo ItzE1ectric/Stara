@@ -11,8 +11,8 @@ namespace Stara {
 
 extern bool g_menuVisible;
 
-// â”€â”€ State
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ State
+// ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
 static Tab g_tab = Tab::Dashboard;
 static float g_menuAlpha = 0.f;
 static float g_hoverAnim[9] = {};
@@ -98,7 +98,7 @@ float g_customDiscussTime = 15.f, g_customVoteTime = 120.f;
 char g_chatBuf[128] = "Stara Client";
 static float g_hue = 0.f;
 
-// ═══════ Phase 1-9: MalumMenu Ported Feature Toggles ═══════
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â Phase 1-9: MalumMenu Ported Feature Toggles Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
 // Phase 1: Vote Manipulation
 bool g_revealVotes = false;
 // Phase 2: Overload
@@ -658,159 +658,32 @@ static float DrawStatusChip(ImDrawList *dl, ImVec2 pos, const char *text,
   return max.x - min.x;
 }
 
-struct StarParticle {
-  float x, y;
-  float driftX, driftY;
-  float size;
-  float twinkleSpeed;
-  float twinklePhase;
-  float depth;
-};
-struct ShootingStar {
-  bool active = false;
-  float x = 0.f, y = 0.f;
-  float vx = 0.f, vy = 0.f;
-  float life = 0.f, maxLife = 0.f;
-  float thickness = 1.f;
-};
-static std::array<StarParticle, 180> g_stars = {};
-static std::array<ShootingStar, 5> g_shootingStars = {};
-static bool g_starfieldInit = false;
-static ImVec2 g_starfieldSize = {0.f, 0.f};
-static float g_nextShoot = 2.4f;
+// Minimal background Ã¢â‚¬â€ clean gradient + subtle accent wash
+static void DrawCleanBackground(ImDrawList *dl, const ImVec2 &screen,
+                                float menuAlpha, const ImVec4 &accent) {
+  ImU32 topL = IM_COL32(8, 12, 22, (int)(240 * menuAlpha));
+  ImU32 topR = IM_COL32(10, 15, 28, (int)(240 * menuAlpha));
+  ImU32 botR = IM_COL32(4, 6, 14, (int)(255 * menuAlpha));
+  ImU32 botL = IM_COL32(6, 8, 18, (int)(255 * menuAlpha));
+  dl->AddRectFilledMultiColor({0, 0}, screen, topL, topR, botR, botL);
+  // Subtle accent wash in corner
+  dl->AddCircleFilled(
+      {screen.x * 0.15f, screen.y * 0.2f}, screen.y * 0.18f,
+      IM_COL32((int)(accent.x * 40), (int)(accent.y * 50),
+               (int)(accent.z * 70), (int)(18 * menuAlpha)),
+      48);
+  dl->AddCircleFilled(
+      {screen.x * 0.85f, screen.y * 0.75f}, screen.y * 0.22f,
+      IM_COL32(8, 18, 35, (int)(22 * menuAlpha)), 48);
+}
+
 static float Randf(float minV, float maxV) {
   return minV + (maxV - minV) * ((float)rand() / (float)RAND_MAX);
 }
-static void InitStarfield(const ImVec2 &screen) {
-  g_starfieldInit = true;
-  g_starfieldSize = screen;
-  for (auto &s : g_stars) {
-    s.x = Randf(0.f, screen.x);
-    s.y = Randf(0.f, screen.y);
-    s.driftX = Randf(-2.6f, 2.6f);
-    s.driftY = Randf(-5.2f, -0.3f);
-    s.size = Randf(0.8f, 2.3f);
-    s.twinkleSpeed = Randf(0.8f, 3.4f);
-    s.twinklePhase = Randf(0.f, 6.283185f);
-    s.depth = Randf(0.45f, 1.9f);
-  }
-  for (auto &st : g_shootingStars) {
-    st = ShootingStar{};
-  }
-}
-static void SpawnShootingStar(const ImVec2 &screen) {
-  for (auto &st : g_shootingStars) {
-    if (st.active)
-      continue;
-    st.active = true;
-    st.x = Randf(-220.f, screen.x * 0.55f);
-    st.y = Randf(10.f, screen.y * 0.32f);
-    st.vx = Randf(420.f, 850.f);
-    st.vy = Randf(90.f, 210.f);
-    st.maxLife = Randf(0.7f, 1.35f);
-    st.life = st.maxLife;
-    st.thickness = Randf(1.2f, 2.4f);
-    return;
-  }
-}
-static void DrawSpaceBackground(ImDrawList *dl, const ImVec2 &screen, float dt,
-                                float menuAlpha, const ImVec4 &accent) {
-  if (!g_starfieldInit || fabsf(g_starfieldSize.x - screen.x) > 2.f ||
-      fabsf(g_starfieldSize.y - screen.y) > 2.f) {
-    InitStarfield(screen);
-  }
-  float t = (float)ImGui::GetTime();
-  ImU32 topA = IM_COL32(5, 8, 20, (int)(220 * menuAlpha));
-  ImU32 topB = IM_COL32(9, 16, 34, (int)(220 * menuAlpha));
-  ImU32 botA = IM_COL32(2, 4, 12, (int)(255 * menuAlpha));
-  ImU32 botB = IM_COL32(5, 10, 22, (int)(255 * menuAlpha));
-  dl->AddRectFilledMultiColor({0, 0}, screen, topA, topB, botB, botA);
-  float nebulaPulse = 0.5f + 0.5f * sinf(t * 0.27f);
-  int nebulaA = (int)(46 * nebulaPulse * menuAlpha);
-  dl->AddCircleFilled({screen.x * 0.18f, screen.y * 0.22f}, screen.y * 0.23f,
-                      IM_COL32((int)(accent.x * 100), (int)(accent.y * 130),
-                               (int)(accent.z * 190), nebulaA),
-                      64);
-  dl->AddCircleFilled({screen.x * 0.83f, screen.y * 0.70f}, screen.y * 0.28f,
-                      IM_COL32(18, 48, 90, (int)(38 * menuAlpha)), 64);
-  for (size_t i = 0; i < g_stars.size(); i++) {
-    auto &s = g_stars[i];
-    float driftScale = dt * (28.f / s.depth);
-    s.x += s.driftX * driftScale;
-    s.y += s.driftY * driftScale;
-    if (s.x < -4.f)
-      s.x = screen.x + 4.f;
-    if (s.x > screen.x + 4.f)
-      s.x = -4.f;
-    if (s.y < -4.f)
-      s.y = screen.y + 4.f;
-    if (s.y > screen.y + 4.f)
-      s.y = -4.f;
-    float tw =
-        0.35f +
-        0.65f * (0.5f + 0.5f * sinf(t * s.twinkleSpeed + s.twinklePhase));
-    float bright = tw * menuAlpha;
-    int alpha = (int)(65 + bright * 155);
-    ImU32 col = IM_COL32((int)(180 + accent.x * 65), (int)(190 + accent.y * 55),
-                         (int)(215 + accent.z * 40), alpha);
-    float radius = s.size * (1.75f - s.depth * 0.42f);
-    dl->AddCircleFilled({s.x, s.y}, radius, col, 10);
-    if ((i % 13) == 0 && bright > 0.7f) {
-      float arm = radius * 4.2f;
-      ImU32 sparkle = IM_COL32(220, 245, 255, (int)(95 * bright));
-      dl->AddLine({s.x - arm, s.y}, {s.x + arm, s.y}, sparkle, 1.f);
-      dl->AddLine({s.x, s.y - arm}, {s.x, s.y + arm}, sparkle, 1.f);
-    }
-  }
-  for (int i = 0; i < (int)g_stars.size(); i += 18) {
-    const auto &a = g_stars[i];
-    const auto &b = g_stars[(i + 6) % g_stars.size()];
-    const auto &c = g_stars[(i + 11) % g_stars.size()];
-    float abdx = a.x - b.x, abdy = a.y - b.y;
-    float acdx = a.x - c.x, acdy = a.y - c.y;
-    if (abdx * abdx + abdy * abdy < 44000.f) {
-      dl->AddLine({a.x, a.y}, {b.x, b.y},
-                  IM_COL32(120, 170, 230, (int)(25 * menuAlpha)), 1.f);
-    }
-    if (acdx * acdx + acdy * acdy < 44000.f) {
-      dl->AddLine({a.x, a.y}, {c.x, c.y},
-                  IM_COL32(120, 170, 230, (int)(18 * menuAlpha)), 1.f);
-    }
-  }
-  g_nextShoot -= dt;
-  if (g_nextShoot <= 0.f) {
-    SpawnShootingStar(screen);
-    g_nextShoot = Randf(2.0f, 4.6f);
-  }
-  for (auto &st : g_shootingStars) {
-    if (!st.active)
-      continue;
-    st.life -= dt;
-    st.x += st.vx * dt;
-    st.y += st.vy * dt;
-    if (st.life <= 0.f || st.x > screen.x + 280.f || st.y > screen.y + 120.f) {
-      st.active = false;
-      continue;
-    }
-    float lifeNorm = st.life / st.maxLife;
-    ImVec2 tip = {st.x, st.y};
-    ImVec2 tail = {st.x - st.vx * 0.11f, st.y - st.vy * 0.11f};
-    for (int seg = 0; seg < 4; seg++) {
-      float a0 = (float)seg / 4.f;
-      float a1 = (float)(seg + 1) / 4.f;
-      ImVec2 p0 = {ImLerp(tip.x, tail.x, a0), ImLerp(tip.y, tail.y, a0)};
-      ImVec2 p1 = {ImLerp(tip.x, tail.x, a1), ImLerp(tip.y, tail.y, a1)};
-      int a = (int)((1.f - a0) * lifeNorm * 185.f * menuAlpha);
-      dl->AddLine(p0, p1, IM_COL32(180, 230, 255, a),
-                  st.thickness + (1.f - a0));
-    }
-    dl->AddCircleFilled(
-        tip, 2.6f, IM_COL32(230, 250, 255, (int)(220 * lifeNorm * menuAlpha)),
-        14);
-  }
-}
-// â”€â”€ Custom Widgets
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+
+// ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Custom Widgets
+// ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
 static bool Toggle(const char *label, bool *v) {
   ImGuiWindow *w = ImGui::GetCurrentWindow();
   if (w->SkipItems)
@@ -1205,8 +1078,8 @@ static void DrawDumpExplorerCard() {
   EndCard();
 }
 
-// â”€â”€ Tab Renderers
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Tab Renderers
+// ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
 static void ApplyEspPreset(int presetId) {
   uint32_t x = 0x9E3779B9u * (uint32_t)(presetId + 1);
   x ^= (x << 13);
@@ -1873,7 +1746,7 @@ static void TabTroll() {
     Game::CompleteAllTasks();
   if (GlowBtn("Close Meeting (Local)", {200, 28}))
     Game::CloseMeeting();
-  ImGui::TextColored({0.5f, 0.8f, 1, 1}, "Closes meeting UI — lets you move during meetings");
+  ImGui::TextColored({0.5f, 0.8f, 1, 1}, "Closes meeting UI Ã¢â‚¬â€ lets you move during meetings");
   EndCard();
 
   Card("Impostor Abilities (Host)");
@@ -1986,7 +1859,7 @@ static void TabTroll() {
     }
     ImGui::Separator();
 
-    // Self role (local only — safe for non-host)
+    // Self role (local only Ã¢â‚¬â€ safe for non-host)
     ImGui::TextColored({0, 0.86f, 1, 1}, "You (Fake Role):");
     ImGui::SameLine();
     ImGui::SetNextItemWidth(140);
@@ -2446,8 +2319,8 @@ static void TabSettings() {
   EndCard();
 }
 
-// â”€â”€ Apply Theme
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Apply Theme
+// ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
 static void ApplyTheme() {
   ImGuiStyle &s = ImGui::GetStyle();
   s.WindowPadding = {14, 10};
@@ -2512,52 +2385,32 @@ static bool TabMatchesSearch(Tab t) {
 }
 
 static void DrawTabHero(ImDrawList *dl, const ImVec2 &cursor, float width) {
-  ImVec4 ac = Accent();
   const char *title = TabName(g_tab);
   const char *subtitle = TabSubtitle(g_tab);
-  ImU32 tone = TabTone(g_tab, 230);
-  float heroH = 56.f;
+  ImU32 tone = TabTone(g_tab, 200);
+  float heroH = 48.f;
   ImVec2 min = cursor;
   ImVec2 max = {cursor.x + width, cursor.y + heroH};
-  dl->AddRectFilled(min, max, IM_COL32(8, 14, 24, 215), 10.f);
-  dl->AddRect(min, max,
-              IM_COL32((int)(ac.x * 255.f * 0.8f), (int)(ac.y * 255.f * 0.8f),
-                       (int)(ac.z * 255.f * 0.8f), 120),
-              10.f, 0, 1.0f);
-  dl->AddRectFilledMultiColor(
-      min, {max.x, min.y + 2.5f},
-      IM_COL32((int)(ac.x * 255), (int)(ac.y * 255), (int)(ac.z * 255), 165),
-      IM_COL32(255, 110, 140, 135), IM_COL32(255, 110, 140, 135),
-      IM_COL32((int)(ac.x * 255), (int)(ac.y * 255), (int)(ac.z * 255), 165));
-  dl->AddText({min.x + 12.f, min.y + 10.f}, Colors::TextPrimary, title);
-  dl->AddText({min.x + 12.f, min.y + 30.f}, IM_COL32(170, 190, 220, 230),
+
+  // Clean dark panel
+  dl->AddRectFilled(min, max, IM_COL32(12, 16, 28, 160), 8.f);
+
+  // Subtle left accent bar
+  dl->AddRectFilled({min.x, min.y + 4.f}, {min.x + 2.5f, max.y - 4.f},
+                    tone, 2.f);
+
+  // Title + subtitle
+  dl->AddText({min.x + 14.f, min.y + 8.f}, IM_COL32(226, 232, 240, 255), title);
+  dl->AddText({min.x + 14.f, min.y + 26.f}, IM_COL32(140, 160, 190, 200),
               subtitle);
-  ImVec2 tagSize = ImGui::CalcTextSize(TabTag(g_tab));
-  ImVec2 tagMin = {max.x - tagSize.x - 14.f, min.y + 8.f};
-  ImVec2 tagMax = {max.x - 8.f, min.y + 24.f};
-  dl->AddRectFilled(tagMin, tagMax, IM_COL32(16, 28, 44, 210), 8.f);
-  dl->AddRect(tagMin, tagMax, IM_COL32(80, 124, 176, 170), 8.f, 0, 1.f);
-  dl->AddText({tagMin.x + 5.f, tagMin.y + 2.f}, IM_COL32(218, 238, 255, 240),
-              TabTag(g_tab));
-  ImVec2 iconMin = {max.x - 34.f, min.y + 30.f};
-  ImVec2 iconMax = {max.x - 10.f, min.y + 52.f};
-  dl->AddRectFilled(iconMin, iconMax,
-                    IM_COL32((int)((tone >> IM_COL32_R_SHIFT) & 0xFF),
-                             (int)((tone >> IM_COL32_G_SHIFT) & 0xFF),
-                             (int)((tone >> IM_COL32_B_SHIFT) & 0xFF), 55),
-                    6.f);
-  dl->AddRect(iconMin, iconMax, IM_COL32(95, 136, 184, 170), 6.f, 0, 1.f);
-  DrawTabGlyph(dl, g_tab,
-               {(iconMin.x + iconMax.x) * 0.5f, (iconMin.y + iconMax.y) * 0.5f},
-               11.8f, IM_COL32(232, 245, 255, 245), 1.2f);
-  dl->AddCircleFilled({max.x - 18.f, min.y + heroH - 15.f}, 2.4f,
-                      IM_COL32(220, 245, 255, 170), 12);
-  dl->AddCircleFilled({max.x - 28.f, min.y + heroH - 22.f}, 1.8f,
-                      IM_COL32(180, 230, 255, 130), 12);
+
+  // Tab icon glyph on far right
+  ImVec2 iconCenter = {max.x - 22.f, (min.y + max.y) * 0.5f};
+  DrawTabGlyph(dl, g_tab, iconCenter, 11.f, tone, 1.1f);
 }
 
-// â”€â”€ Main Render
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Main Render
+// ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
 void RenderMenu() {
   float dt = ImGui::GetIO().DeltaTime;
   ImVec2 displaySize = ImGui::GetIO().DisplaySize;
@@ -2600,42 +2453,11 @@ void RenderMenu() {
         (std::string("FPS: ") + std::to_string((int)(1.f / safeDt))).c_str());
   }
 
-  // Background stars + particles
+  // Clean background
   {
     ImDrawList *bg = ImGui::GetBackgroundDrawList();
-    ImVec2 screen = displaySize;
     ImVec4 ac = Accent();
-    DrawSpaceBackground(bg, screen, dt, g_menuAlpha, ac);
-
-    static struct {
-      float x, y, vx, vy, s, a;
-    } dust[64];
-    static bool dustInit = false;
-    if (!dustInit) {
-      dustInit = true;
-      for (auto &p : dust) {
-        p.x = Randf(0.f, screen.x);
-        p.y = Randf(0.f, screen.y);
-        p.vx = Randf(-8.f, 8.f);
-        p.vy = Randf(-12.f, -2.f);
-        p.s = Randf(0.7f, 2.2f);
-        p.a = Randf(0.15f, 0.55f);
-      }
-    }
-    for (auto &p : dust) {
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      if (p.x < -2.f)
-        p.x = screen.x + 2.f;
-      if (p.x > screen.x + 2.f)
-        p.x = -2.f;
-      if (p.y < -2.f)
-        p.y = screen.y + 2.f;
-      if (p.y > screen.y + 2.f)
-        p.y = -2.f;
-      ImU32 c = IM_COL32(120, 200, 255, (int)(p.a * 70.f * g_menuAlpha));
-      bg->AddCircleFilled({p.x, p.y}, p.s, c, 8);
-    }
+    DrawCleanBackground(bg, displaySize, g_menuAlpha, ac);
   }
 
   // Main window
@@ -2659,27 +2481,26 @@ void RenderMenu() {
     ImVec4 ac = Accent();
     float t = (float)ImGui::GetTime();
 
-    // Animated outer glow
-    float pulse = 0.5f + 0.5f * sinf(t * 2.15f);
-    for (int i = 0; i < 3; i++) {
-      float grow = 1.2f + i * 2.5f;
-      int a = (int)((46 - i * 11) * pulse * g_menuAlpha);
-      dl->AddRect(
-          {wp.x - grow, wp.y - grow}, {wp.x + ws.x + grow, wp.y + ws.y + grow},
-          IM_COL32((int)(ac.x * 255), (int)(ac.y * 255), (int)(ac.z * 255), a),
-          12.f + grow, 0, 1.1f);
-    }
+    // Subtle static border (no pulsing)
+    dl->AddRect(wp, {wp.x + ws.x, wp.y + ws.y},
+                IM_COL32((int)(ac.x * 100 + 20), (int)(ac.y * 100 + 20),
+                         (int)(ac.z * 110 + 25), (int)(40 * g_menuAlpha)),
+                12.f, 0, 0.8f);
 
-    // Title bar
-    dl->AddRectFilled(wp, {wp.x + ws.x, wp.y + 44}, IM_COL32(10, 14, 24, 240),
+    // Title bar — clean, dark
+    dl->AddRectFilled(wp, {wp.x + ws.x, wp.y + 40}, IM_COL32(10, 14, 22, 235),
                       12, ImDrawFlags_RoundCornersTop);
+
+    // Top accent line — single color gradient fade
     dl->AddRectFilledMultiColor(
-        wp, {wp.x + ws.x, wp.y + 3},
-        IM_COL32((int)(ac.x * 255), (int)(ac.y * 255), (int)(ac.z * 255), 200),
-        IM_COL32(255, 80, 120, 120), IM_COL32(255, 80, 120, 120),
-        IM_COL32((int)(ac.x * 255), (int)(ac.y * 255), (int)(ac.z * 255), 200));
-    dl->AddText({wp.x + 14, wp.y + 13}, Colors::TextPrimary, APP_NAME);
-    dl->AddText({wp.x + ws.x - 114, wp.y + 13}, Colors::TextSecondary,
+        wp, {wp.x + ws.x, wp.y + 1.5f},
+        IM_COL32((int)(ac.x * 255), (int)(ac.y * 255), (int)(ac.z * 255), 140),
+        IM_COL32((int)(ac.x * 150), (int)(ac.y * 150), (int)(ac.z * 160), 60),
+        IM_COL32(0, 0, 0, 0), IM_COL32(0, 0, 0, 0));
+
+    // Title text
+    dl->AddText({wp.x + 14, wp.y + 11}, IM_COL32(226, 232, 240, 255), "STARA");
+    dl->AddText({wp.x + ws.x - 100, wp.y + 11}, IM_COL32(100, 120, 150, 180),
                 APP_VERSION);
 
     EnsureBoltIconLoaded();
@@ -2734,18 +2555,18 @@ void RenderMenu() {
                      IM_COL32(194, 84, 94, 170));
     }
 
-    // Footer
-    dl->AddRectFilled({wp.x, wp.y + ws.y - 24}, {wp.x + ws.x, wp.y + ws.y},
-                      IM_COL32(8, 8, 14, 220), 10,
+    // Footer — minimal
+    dl->AddRectFilled({wp.x, wp.y + ws.y - 20}, {wp.x + ws.x, wp.y + ws.y},
+                      IM_COL32(8, 10, 16, 200), 10,
                       ImDrawFlags_RoundCornersBottom);
-    dl->AddText({wp.x + 12, wp.y + ws.y - 18}, Colors::TextDim,
-                "Among Stara Client | github.com/stara");
+    dl->AddText({wp.x + 12, wp.y + ws.y - 15}, IM_COL32(80, 95, 120, 160),
+                "STARA | github.com/ItzE1ectric/Stara");
 
-    ImGui::SetCursorPosY(50);
+    ImGui::SetCursorPosY(46);
 
     // Sidebar + Content
     float sidebarWidth = std::clamp(178.f * g_uiScale, 170.f, 240.f);
-    ImGui::BeginChild("##sidebar", {sidebarWidth, ws.y - 78}, false);
+    ImGui::BeginChild("##sidebar", {sidebarWidth, ws.y - 70}, false);
     ImGui::Spacing();
     ImGui::SetNextItemWidth(-6.f);
     ImGui::InputTextWithHint("##tabSearch", "Search tabs...", g_tabSearch,
@@ -2830,13 +2651,13 @@ void RenderMenu() {
     ImGui::SameLine();
 
     // Content
-    ImGui::BeginChild("##content", {0, ws.y - 78}, false);
+    ImGui::BeginChild("##content", {0, ws.y - 70}, false);
     ImGui::Spacing();
     {
       ImVec2 heroPos = ImGui::GetCursorScreenPos();
       float heroW = std::max(260.f, ImGui::GetContentRegionAvail().x);
       DrawTabHero(dl, heroPos, heroW);
-      ImGui::Dummy({heroW, 60.f});
+      ImGui::Dummy({heroW, 52.f});
       ImGui::Spacing();
     }
     ImGui::PushStyleVar(ImGuiStyleVar_Alpha, g_tabContentFade);
