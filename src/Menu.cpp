@@ -15,7 +15,7 @@ extern bool g_menuVisible;
 // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
 static Tab g_tab = Tab::Dashboard;
 static float g_menuAlpha = 0.f;
-static float g_hoverAnim[9] = {};
+static float g_hoverAnim[(int)Tab::Count] = {};
 static std::unordered_map<ImGuiID, float> g_toggleAnim;
 static std::unordered_map<ImGuiID, float> g_buttonAnim;
 static float g_tabContentFade = 1.f;
@@ -66,6 +66,7 @@ bool g_rainbow = false, g_spin = false, g_tiny = false, g_giant = false;
 bool g_dance = false, g_particle = false, g_autoPath = false;
 bool g_noclip = false, g_chatSpam = false;
 bool g_devMode = false, g_fpsDisp = true, g_rgbAccent = false;
+bool g_autoFarm = false;
 float g_accentCol[4] = {0, 0.86f, 1, 1};
 char g_nameBuf[64] = "Stara";
 float g_playerCol[4] = {0, 0.86f, 1, 1};
@@ -124,7 +125,13 @@ bool g_invertControls = false;
 bool g_noGameEnd = false;
 bool g_distanceTracers = false;
 bool g_freeCosmetics = false;
-
+// Hydra-Ported Feature Toggles
+bool g_immortality = false;
+bool g_antiSabotage = false;
+bool g_autoReport = false;
+bool g_disableMeetings = false;
+bool g_flippedSkeld = false;
+bool g_blockVotekick = false;
 
 static ImVec4 Accent() {
   if (g_rgbAccent)
@@ -407,6 +414,8 @@ static const char *TabTag(Tab t) {
     return "ES";
   case Tab::Movement:
     return "MV";
+  case Tab::AutoFarm:
+    return "AF";
   case Tab::Fun:
     return "FN";
   case Tab::Troll:
@@ -432,6 +441,8 @@ static const char *TabSubtitle(Tab t) {
     return "Player overlays, role markers, and diagnostics";
   case Tab::Movement:
     return "Speed, pathing, and teleport utilities";
+  case Tab::AutoFarm:
+    return "Task loops, automation routing, and safe farm controls";
   case Tab::Fun:
     return "Character effects, emotes, and flavor controls";
   case Tab::Troll:
@@ -457,6 +468,8 @@ static const char *TabSidebarHint(Tab t) {
     return "overlay";
   case Tab::Movement:
     return "mobility";
+  case Tab::AutoFarm:
+    return "automation";
   case Tab::Fun:
     return "effects";
   case Tab::Troll:
@@ -482,6 +495,8 @@ static ImU32 TabTone(Tab t, int alpha = 255) {
     return IM_COL32(72, 232, 255, alpha);
   case Tab::Movement:
     return IM_COL32(120, 220, 140, alpha);
+  case Tab::AutoFarm:
+    return IM_COL32(148, 228, 112, alpha);
   case Tab::Fun:
     return IM_COL32(236, 170, 110, alpha);
   case Tab::Troll:
@@ -541,6 +556,18 @@ static void DrawTabGlyph(ImDrawList *dl, Tab t, ImVec2 center, float size,
     dl->AddTriangleFilled({center.x + s * 0.86f, center.y - s * 0.46f},
                           {center.x + s * 0.56f, center.y - s * 0.42f},
                           {center.x + s * 0.75f, center.y - s * 0.16f}, col);
+    break;
+  }
+  case Tab::AutoFarm: {
+    dl->AddRect({center.x - s * 0.7f, center.y - s * 0.58f},
+                {center.x + s * 0.34f, center.y + s * 0.52f}, col, 3.f, 0,
+                thickness);
+    dl->AddLine({center.x + s * 0.34f, center.y - s * 0.1f},
+                {center.x + s * 0.82f, center.y - s * 0.1f}, col, thickness);
+    dl->AddCircle({center.x + s * 0.58f, center.y + s * 0.28f}, s * 0.24f, col,
+                  14, thickness);
+    dl->AddCircleFilled({center.x - s * 0.12f, center.y - s * 0.08f}, s * 0.1f,
+                        col, 10);
     break;
   }
   case Tab::Fun:
@@ -1701,6 +1728,43 @@ static void TabMovement() {
   EndCard();
 }
 
+static void TabAutoFarm() {
+  Card("Automation Core");
+  Toggle("Lobby Auto Farm (Rejoin if Kicked)", &g_autoFarm);
+  Toggle("Auto Complete Tasks", &g_autoTasks);
+  Toggle("Auto Report Bodies", &g_autoReport);
+  Toggle("Auto Path Loop", &g_autoPath);
+  Toggle("Auto Spam Chat", &g_chatSpam);
+  Toggle("Always Chat (Bypass Phase)", &g_alwaysChat);
+  if (g_autoFarm)
+    ImGui::TextColored({0.5f, 0.95f, 0.6f, 1.f},
+                       "Auto Farm active: if kicked, it will auto-find a new "
+                       "public lobby.");
+  ImGui::TextColored({0.52f, 0.78f, 0.95f, 1.f},
+                     "For stability, combine one movement toggle with one task "
+                     "toggle.");
+  EndCard();
+
+  Card("Task Farming");
+  if (GlowBtn("Complete All Tasks Now", {220, 30})) {
+    Game::CompleteAllTasks();
+    PushToast("Task farm pulse sent", IM_COL32(120, 205, 255, 245), 1.8f);
+  }
+  if (GlowBtn("Emergency Meeting Pulse", {220, 30}))
+    Game::ForceEmergencyMeeting();
+  EndCard();
+
+  Card("Protection & Utility");
+  Toggle("Anti-Kick (Safe Mode)", &g_antiKick);
+  Toggle("Force Shield (GA) (Host)", &g_forceProtect);
+  Toggle("Freeze All Players", &g_freezeAll);
+  Toggle("See Ghosts", &g_seeGhosts);
+  Toggle("Infinite Emergencies", &g_infiniteEmergencies);
+  ImGui::TextColored({0.88f, 0.72f, 0.42f, 1.f},
+                     "Host-tagged options can fail if host authority changes.");
+  EndCard();
+}
+
 static void TabFun() {
   Card("Character Effects");
   Toggle("Rainbow Character", &g_rainbow);
@@ -2032,17 +2096,21 @@ static void TabTroll() {
   }
   EndCard();
 
-  Card("Teleport To Room (Skeld)");
-  const char *skeldRooms[] = {"Cafeteria", "Reactor",      "Navigation",
-                              "MedBay",    "Electrical",   "Storage",
-                              "Weapons",   "Upper Engine", "Lower Engine"};
-  for (int i = 0; i < 9; i++) {
-    ImGui::PushID(300 + i);
-    if (GlowBtn(skeldRooms[i], {140, 24}))
-      Game::TeleportToRoom(i);
-    if ((i % 3) != 2)
-      ImGui::SameLine();
-    ImGui::PopID();
+  Card("Teleport To Room (Map-Aware)");
+  {
+    int mapId = Game::GetCurrentMapId();
+    const char *mapNames[] = {"Skeld", "MiraHQ", "Polus", "dlekS", "Airship", "Fungle"};
+    ImGui::TextColored({0.4f, 0.85f, 1, 1}, "Map: %s",
+                       (mapId >= 0 && mapId <= 5) ? mapNames[mapId] : "Unknown");
+    int roomCount = Game::GetTeleportRoomCount();
+    for (int i = 0; i < roomCount; i++) {
+      ImGui::PushID(300 + i);
+      if (GlowBtn(Game::GetTeleportRoomName(i), {140, 24}))
+        Game::TeleportToRoomMapAware(i);
+      if ((i % 3) != 2)
+        ImGui::SameLine();
+      ImGui::PopID();
+    }
   }
   EndCard();
 
@@ -2051,6 +2119,36 @@ static void TabTroll() {
     Game::PlayAnimation(2);
   if (GlowBtn("Play Scan Anim", {160, 28}))
     Game::PlayAnimation(1);
+  EndCard();
+
+  Card("Hydra: Immortality");
+  if (Toggle("Immortal (Vent Exploit)", &g_immortality))
+    Game::SetImmortality(g_immortality);
+  ImGui::TextColored({0.5f, 0.8f, 1, 1}, "Server thinks you're in a vent - kills fail");
+  ImGui::TextColored({1.f, 0.6f, 0.3f, 1.f}, "Re-sends after meetings automatically");
+  EndCard();
+
+  Card("Hydra: Anti-Sabotage");
+  Toggle("Block Sabotages (Non-Host)", &g_antiSabotage);
+  ImGui::TextColored({0.5f, 0.8f, 1, 1}, "Resets sab cooldown so impostors can't sabotage");
+  ImGui::TextColored({1.f, 0.6f, 0.3f, 1.f}, "Works even when you're not host!");
+  EndCard();
+
+  Card("Hydra: Auto Report");
+  Toggle("Auto Report Bodies", &g_autoReport);
+  ImGui::TextColored({0.5f, 0.8f, 1, 1}, "Automatically reports nearest dead body");
+  EndCard();
+
+  Card("Hydra: Host Controls");
+  if (Toggle("Disable Meetings (Host)", &g_disableMeetings))
+    Game::SetDisableMeetings(g_disableMeetings);
+  ImGui::TextColored({0.5f, 0.8f, 1, 1}, "No one can call meetings or report bodies");
+  if (Toggle("Block Votekick (Host)", &g_blockVotekick))
+    Game::BlockVotekick(g_blockVotekick);
+  ImGui::TextColored({0.5f, 0.8f, 1, 1}, "Prevents anyone from votekicking you");
+  if (Toggle("Flipped Skeld", &g_flippedSkeld))
+    Game::FlipSkeld(g_flippedSkeld);
+  ImGui::TextColored({0.5f, 0.8f, 1, 1}, "Swap Skeld for mirrored Dleks map");
   EndCard();
 
   Card("Overload System");
@@ -2677,6 +2775,9 @@ void RenderMenu() {
       break;
     case Tab::Movement:
       TabMovement();
+      break;
+    case Tab::AutoFarm:
+      TabAutoFarm();
       break;
     case Tab::Fun:
       TabFun();

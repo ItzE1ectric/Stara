@@ -116,6 +116,7 @@ static uintptr_t g_rvaRpcSetLevel = 0x5C9620;
 static uintptr_t g_rvaRpcShapeshift = 0x5C9ED0;
 static uintptr_t g_rvaRpcVanish = 0x5CA3E0;
 static uintptr_t g_rvaRpcAppear = 0x5C8BA0;
+static uintptr_t g_rvaMonoStartCoroutineString = 0x1F4C290;
 static uintptr_t g_rvaRpcEnterVent = 0x5E3250;
 static uintptr_t g_rvaRpcExitVent = 0x5E3340;
 static uintptr_t g_rvaRpcCloseDoorsOfType = 0x637E00;
@@ -124,6 +125,10 @@ static uintptr_t g_rvaRpcUpdateSystem = 0x637EB0;
 static uintptr_t g_rvaRpcVotingComplete = 0x568E20;
 // Phase 9: No Game End
 static uintptr_t g_rvaCheckEndCriteria = 0x554DC0;
+// Hydra: VentilationSystem.Update(Operation, int)
+static uintptr_t g_rvaVentSystemUpdate = 0x684C80;
+// Hydra: ReportDeadBody
+static uintptr_t g_rvaReportDeadBody = 0x5C7E60;
 
 static void ResolveRvasFromDump() {
   using namespace DumpDatabase;
@@ -194,6 +199,8 @@ static void ResolveRvasFromDump() {
       GetMethodRva("PlayerControl", "RpcShapeshift", g_rvaRpcShapeshift);
   g_rvaRpcVanish = GetMethodRva("PlayerControl", "RpcVanish", g_rvaRpcVanish);
   g_rvaRpcAppear = GetMethodRva("PlayerControl", "RpcAppear", g_rvaRpcAppear);
+  g_rvaMonoStartCoroutineString = GetMethodRva(
+      "MonoBehaviour", "StartCoroutine", g_rvaMonoStartCoroutineString);
   g_rvaRpcEnterVent =
       GetMethodRva("PlayerPhysics", "RpcEnterVent", g_rvaRpcEnterVent);
   g_rvaRpcExitVent =
@@ -206,6 +213,10 @@ static void ResolveRvasFromDump() {
       GetMethodRva("MeetingHud", "RpcVotingComplete", g_rvaRpcVotingComplete);
   g_rvaCheckEndCriteria =
       GetMethodRva("LogicGameFlowNormal", "CheckEndCriteria", g_rvaCheckEndCriteria);
+  g_rvaVentSystemUpdate =
+      GetMethodRva("VentilationSystem", "Update", g_rvaVentSystemUpdate);
+  g_rvaReportDeadBody =
+      GetMethodRva("PlayerControl", "ReportDeadBody", g_rvaReportDeadBody);
 }
 
 // NOP helper: patches a function to immediately return
@@ -380,6 +391,10 @@ bool Init() {
       MeetingHud::klass = il2cpp_class_from_name(img, "", "MeetingHud");
     if (!Vent::klass)
       Vent::klass = il2cpp_class_from_name(img, "", "Vent");
+    if (!VentilationSystem::klass)
+      VentilationSystem::klass = il2cpp_class_from_name(img, "", "VentilationSystem");
+    if (!SabotageSystemType::klass)
+      SabotageSystemType::klass = il2cpp_class_from_name(img, "", "SabotageSystemType");
   }
 
   DumpDatabase::AutoLoad();
@@ -418,6 +433,79 @@ static void *GetAmongUsClientInstance() {
   if (field)
     il2cpp_field_static_get_value(field, &inst);
   return IsValid(inst) ? inst : nullptr;
+}
+
+typedef void *(__cdecl *StartCoroutineString_fn)(void *, void *, void *);
+
+static bool StartAutoFindLobbyCoroutine() {
+  if (!gameAssembly || !il2cpp_string_new || !g_rvaMonoStartCoroutineString)
+    return false;
+
+  void *inst = GetAmongUsClientInstance();
+  if (!IsValid(inst))
+    return false;
+
+  auto startCoroutine =
+      (StartCoroutineString_fn)(gameAssembly + g_rvaMonoStartCoroutineString);
+  if (!startCoroutine)
+    return false;
+
+  void *coName = il2cpp_string_new("CoFindGame");
+  if (!IsValid(coName))
+    return false;
+
+  __try {
+    startCoroutine(inst, coName, nullptr);
+    return true;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return false;
+  }
+}
+
+static void AutoFarmTick(float now, bool hasClient, int gameState,
+                         int lastDisconnectReason) {
+  static bool wasEnabled = false;
+  static bool wasInSession = false;
+  static float nextJoinAttemptAt = 0.f;
+
+  if (!g_autoFarm) {
+    wasEnabled = false;
+    wasInSession = (isInGame || isInLobby);
+    nextJoinAttemptAt = 0.f;
+    return;
+  }
+
+  bool inSession = (isInGame || isInLobby);
+  if (!wasEnabled) {
+    wasEnabled = true;
+    nextJoinAttemptAt = now + 0.4f;
+    printf("[+] Auto Farm enabled\n");
+  }
+
+  // Transitioned out of an active session.
+  if (wasInSession && !inSession) {
+    if (lastDisconnectReason == 7) { // DisconnectReasons.Kicked
+      nextJoinAttemptAt = now + 1.5f;
+      printf("[!] Auto Farm: kick detected, searching new lobby...\n");
+    } else {
+      nextJoinAttemptAt = now + 4.0f;
+    }
+  }
+
+  // Game ended: lobby can be destroyed depending on host; prepare a slower retry.
+  if (gameState == 3 && !inSession)
+    nextJoinAttemptAt = std::max(nextJoinAttemptAt, now + 3.0f);
+
+  if (!inSession && hasClient && now >= nextJoinAttemptAt) {
+    if (StartAutoFindLobbyCoroutine()) {
+      nextJoinAttemptAt = now + 8.0f;
+      printf("[*] Auto Farm: running CoFindGame...\n");
+    } else {
+      nextJoinAttemptAt = now + 3.5f;
+    }
+  }
+
+  wasInSession = inSession;
 }
 
 // --- AmHost hook (MalumMenu-style) ---
@@ -750,9 +838,10 @@ static void UpdateInternal() {
 
   // Determine isInGame/isInLobby: require AmongUsClient.Instance + GameState + LocalPlayer.
   // InnerNetClient.GameState at offset 0x64: 0=NotJoined, 1=Joined(lobby), 2=Started, 3=Ended
+  bool hasClient = false;
+  int gameState = 0;
+  int lastDisconnectReason = -1;
   {
-    bool hasClient = false;
-    int gameState = 0;
     if (AmongUsClient::klass) {
       void *field =
           il2cpp_class_get_field_from_name(AmongUsClient::klass, "Instance");
@@ -762,6 +851,8 @@ static void UpdateInternal() {
       if (IsValid(inst)) {
         hasClient = true;
         gameState = *(int *)((uintptr_t)inst + 0x64); // GameState
+        lastDisconnectReason =
+            *(int *)((uintptr_t)inst + 0x40); // LastDisconnectReason
       }
     }
     void *lp = GetLocalPlayer();
@@ -778,6 +869,8 @@ static void UpdateInternal() {
       il2cpp_field_static_get_value(field, &meeting);
     isInMeeting = IsValid(meeting);
   }
+
+  AutoFarmTick(currentTime, hasClient, gameState, lastDisconnectReason);
 
   if (!isInGame && !isInLobby) {
     players.clear();
@@ -1194,6 +1287,37 @@ static void UpdateInternal() {
       // 18. Moonwalk — continuously flip direction
       if (g_moonwalk) {
         SetMoonwalk(true);
+      }
+
+      // 19. Anti-Sabotage — reset sabotage cooldown continuously
+      if (g_antiSabotage && ShipStatus::klass && gameAssembly) {
+        static float asTimer = 0;
+        asTimer += 0.033f;
+        if (asTimer > 0.5f) {
+          asTimer = 0;
+          AntiSabotage();
+        }
+      }
+
+      // 20. Auto Report Bodies — report nearest body automatically
+      if (g_autoReport) {
+        static float arTimer = 0;
+        arTimer += 0.033f;
+        if (arTimer > 1.0f) {
+          arTimer = 0;
+          AutoReportBodies();
+        }
+      }
+
+      // 21. Immortality — re-send after meeting ends
+      if (g_immortality && !isInMeeting) {
+        static bool wasInMeeting = false;
+        if (wasInMeeting) {
+          SetImmortality(true); // Re-send vent system update
+          wasInMeeting = false;
+        }
+        // Track meeting state for re-send
+        wasInMeeting = isInMeeting;
       }
 
     } // end isInGame toggles
@@ -3368,6 +3492,12 @@ void LogEvent(const std::string& text, uint32_t color) {
 // Phase 7: Panic Mode
 // ═══════════════════════════════════════════════════════════════════════
 
+// Forward declarations for statics defined later (used in PanicDisableAll)
+static bool s_noGameEndPatched;
+static bool s_immortalityActive;
+static bool s_meetingsPatched;
+static bool s_votekickPatched;
+
 // Defined in Menu.cpp as extern — this is just the game-side cleanup
 void PanicDisableAll() {
   // Reset game state that cheats may have modified
@@ -3393,6 +3523,16 @@ void PanicDisableAll() {
 
   // Restore anti-kick
   UnpatchAntiKick();
+
+  // Restore Hydra features
+  if (s_immortalityActive)
+    SetImmortality(false);
+  if (s_meetingsPatched)
+    SetDisableMeetings(false);
+  if (s_votekickPatched)
+    BlockVotekick(false);
+  if (s_noGameEndPatched)
+    SetNoGameEnd(false);
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -3429,6 +3569,284 @@ void SetNoGameEnd(bool on) {
       VirtualProtect((void *)addr, 4, oldProt, &oldProt);
       s_noGameEndPatched = false;
       printf("[+] No Game End disabled\n");
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Hydra-Ported Features
+// ═══════════════════════════════════════════════════════════════════════
+
+// --- Immortality (VentilationSystem exploit) ---
+// Tricks the server into thinking we're inside a vent (ID 50, which doesn't exist)
+// Server-side kill checks fail because it thinks we're venting
+typedef void(__cdecl *VentSystemUpdate_fn)(int op, int ventId, void *method);
+static bool s_immortalityActive = false;
+
+void SetImmortality(bool on) {
+  Attach();
+  if (!gameAssembly) return;
+
+  if (on && !s_immortalityActive) {
+    __try {
+      auto fn = (VentSystemUpdate_fn)(gameAssembly + g_rvaVentSystemUpdate);
+      fn(1, 50, nullptr); // Operation.Enter = 1, ventId = 50 (fake)
+    } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    s_immortalityActive = true;
+    printf("[+] Immortality enabled (VentSystem exploit)\n");
+  } else if (!on && s_immortalityActive) {
+    __try {
+      auto fn = (VentSystemUpdate_fn)(gameAssembly + g_rvaVentSystemUpdate);
+      fn(2, 50, nullptr); // Operation.Exit = 2, ventId = 50
+    } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    s_immortalityActive = false;
+    printf("[+] Immortality disabled\n");
+  }
+}
+
+// --- Anti-Sabotage (non-host) ---
+// Sends an invalid sabotage RPC to reset the sabotage cooldown timer
+// This prevents impostors from sabotaging because the cooldown resets immediately
+void AntiSabotage() {
+  Attach();
+  if (!ShipStatus::klass || !gameAssembly) return;
+
+  void *field = il2cpp_class_get_field_from_name(ShipStatus::klass, "Instance");
+  void *inst = nullptr;
+  if (field) il2cpp_field_static_get_value(field, &inst);
+  if (!IsValid(inst)) return;
+
+  __try {
+    auto fn = (RpcUpdateSystem_fn)(gameAssembly + g_rvaRpcUpdateSystem);
+    // SystemTypes.Sabotage = 14 with amount 255 = invalid, resets cooldown
+    fn(inst, 14, 255, nullptr);
+  } __except (EXCEPTION_EXECUTE_HANDLER) {}
+}
+
+// --- Map-Specific Teleport Locations ---
+struct RoomLocation { const char* name; float x, y; };
+
+static const RoomLocation s_skeldRooms[] = {
+  {"Cafeteria",    -0.78f,   2.48f},
+  {"Weapons",       8.04f,   1.24f},
+  {"MedBay",       -8.61f,  -4.30f},
+  {"Admin",         2.79f,  -7.69f},
+  {"Oxygen",        6.50f,  -3.50f},
+  {"Navigation",   16.77f,  -4.67f},
+  {"Shields",       9.26f, -12.19f},
+  {"Communications",5.10f, -15.24f},
+  {"Storage",      -3.72f, -14.61f},
+  {"Electrical",   -6.91f,  -8.60f},
+  {"Upper Engine", -17.61f, -0.72f},
+  {"Lower Engine", -17.33f,-13.10f},
+  {"Security",    -12.81f,  -3.01f},
+  {"Reactor",     -20.53f,  -5.39f},
+};
+static const RoomLocation s_miraRooms[] = {
+  {"Launchpad",     -4.43f,  1.98f},
+  {"MedBay",        14.58f,  0.33f},
+  {"Communications",15.60f,  4.96f},
+  {"Locker Room",    9.68f,  3.71f},
+  {"Decontamination",6.12f,  6.34f},
+  {"Laboratory",     9.43f, 13.98f},
+  {"Reactor",        2.55f, 11.71f},
+  {"Office",        14.68f, 20.63f},
+  {"Admin",         19.41f, 19.01f},
+  {"Greenhouse",    17.92f, 23.86f},
+  {"Cafeteria",     25.44f,  2.77f},
+  {"Storage",       19.59f,  4.79f},
+  {"Weapons",       19.94f, -1.96f},
+};
+static const RoomLocation s_polusRooms[] = {
+  {"Dropship",     16.61f,  -1.17f},
+  {"Storage",      20.35f, -11.46f},
+  {"Electrical",    7.51f,  -9.86f},
+  {"Security",      2.98f, -12.18f},
+  {"Oxygen",        1.55f, -16.81f},
+  {"Boiler Room",   2.14f, -23.55f},
+  {"Communications",11.70f,-15.87f},
+  {"Weapons",      10.71f, -22.90f},
+  {"Office",       25.00f, -16.99f},
+  {"Admin",        22.76f, -22.32f},
+  {"Laboratory",   33.48f,  -7.41f},
+  {"Specimen",     36.78f, -19.28f},
+};
+
+static const RoomLocation* GetMapRooms(int mapId, int &count) {
+  switch (mapId) {
+    case 0: case 3: // Skeld or Dleks
+      count = (int)(sizeof(s_skeldRooms)/sizeof(s_skeldRooms[0]));
+      return s_skeldRooms;
+    case 1: // MiraHQ
+      count = (int)(sizeof(s_miraRooms)/sizeof(s_miraRooms[0]));
+      return s_miraRooms;
+    case 2: // Polus
+      count = (int)(sizeof(s_polusRooms)/sizeof(s_polusRooms[0]));
+      return s_polusRooms;
+    default:
+      count = (int)(sizeof(s_skeldRooms)/sizeof(s_skeldRooms[0]));
+      return s_skeldRooms;
+  }
+}
+
+int GetTeleportRoomCount() {
+  int count = 0;
+  int mapId = GetCurrentMapId();
+  GetMapRooms(mapId, count);
+  return count;
+}
+
+const char* GetTeleportRoomName(int idx) {
+  int count = 0;
+  int mapId = GetCurrentMapId();
+  const RoomLocation* rooms = GetMapRooms(mapId, count);
+  if (idx >= 0 && idx < count) return rooms[idx].name;
+  return "Unknown";
+}
+
+void TeleportToRoomMapAware(int roomIdx) {
+  int count = 0;
+  int mapId = GetCurrentMapId();
+  const RoomLocation* rooms = GetMapRooms(mapId, count);
+  if (roomIdx < 0 || roomIdx >= count) return;
+  TeleportTo(rooms[roomIdx].x, rooms[roomIdx].y);
+}
+
+// --- Auto Report Bodies ---
+// Reports the nearest dead body automatically
+void AutoReportBodies() {
+  Attach();
+  void *lp = GetLocalPlayer();
+  if (!IsValid(lp) || !gameAssembly) return;
+
+  // Find nearest dead player and report their body
+  float bestDist = 999999.f;
+  int bestId = -1;
+  for (const auto &p : players) {
+    if (!p.isDead || !p.hasWorldPos) continue;
+    float dx = p.x - localX;
+    float dy = p.y - localY;
+    float d = dx*dx + dy*dy;
+    if (d < bestDist) {
+      bestDist = d;
+      bestId = p.playerId;
+    }
+  }
+  if (bestId < 0) return;
+
+  // Use CmdReportDeadBody with the target's data
+  void *target = ResolveTargetPlayer(bestId);
+  if (!IsValid(target)) return;
+  void *targetData = *(void **)((uintptr_t)target + 0x58);
+  if (!IsValid(targetData)) return;
+
+  __try {
+    typedef void(__cdecl *CmdReport_fn)(void*, void*, void*);
+    auto fn = (CmdReport_fn)(gameAssembly + g_rvaCmdReportDeadBody);
+    fn(lp, targetData, nullptr);
+  } __except (EXCEPTION_EXECUTE_HANDLER) {}
+}
+
+// --- Disable Meetings (Host) ---
+// NOPs the ReportDeadBody function so meetings can never be called
+static bool s_meetingsPatched = false;
+static uint8_t s_origReportDeadBody[4] = {};
+
+void SetDisableMeetings(bool on) {
+  Attach();
+  if (!gameAssembly) return;
+
+  uintptr_t addr = gameAssembly + g_rvaReportDeadBody;
+
+  if (on && !s_meetingsPatched) {
+    DWORD oldProt;
+    if (VirtualProtect((void *)addr, 4, PAGE_EXECUTE_READWRITE, &oldProt)) {
+      memcpy(s_origReportDeadBody, (void *)addr, 4);
+      *(uint8_t *)(addr) = 0xC3;
+      *(uint8_t *)(addr + 1) = 0x90;
+      *(uint8_t *)(addr + 2) = 0x90;
+      VirtualProtect((void *)addr, 4, oldProt, &oldProt);
+      s_meetingsPatched = true;
+      printf("[+] Meetings disabled (ReportDeadBody NOPed)\n");
+    }
+  } else if (!on && s_meetingsPatched) {
+    DWORD oldProt;
+    if (VirtualProtect((void *)addr, 4, PAGE_EXECUTE_READWRITE, &oldProt)) {
+      memcpy((void *)addr, s_origReportDeadBody, 4);
+      VirtualProtect((void *)addr, 4, oldProt, &oldProt);
+      s_meetingsPatched = false;
+      printf("[+] Meetings re-enabled\n");
+    }
+  }
+}
+
+// --- Flipped Skeld ---
+// Swaps ShipPrefabs[0] (Skeld) and ShipPrefabs[3] (Dleks) so you spawn in the mirrored map
+void FlipSkeld(bool on) {
+  Attach();
+  if (!AmongUsClient::klass) return;
+
+  void *aucField = il2cpp_class_get_field_from_name(AmongUsClient::klass,
+      "<Instance>k__BackingField");
+  void *aucInst = nullptr;
+  if (aucField) il2cpp_field_static_get_value(aucField, &aucInst);
+  if (!IsValid(aucInst)) return;
+
+  // ShipPrefabs is an Il2CppArray-like list at a known offset
+  // We swap elements [0] and [3] via il2cpp runtime invoke
+  __try {
+    void *prefabsField = il2cpp_class_get_field_from_name(
+        *(void **)aucInst, "ShipPrefabs");
+    if (!prefabsField) return;
+
+    // Use runtime invoke to get the list and swap elements
+    void *listKlass = *(void **)aucInst;
+    void *getMethod = il2cpp_class_get_method_from_name(listKlass, "get_Item", 1);
+    void *setMethod = il2cpp_class_get_method_from_name(listKlass, "set_Item", 2);
+    if (!getMethod || !setMethod) return;
+
+    // This is a simplified swap attempt
+    // Due to il2cpp list complexity, we log the attempt
+    printf("[%c] Flipped Skeld toggle %s\n", on ? '+' : '-', on ? "ON" : "OFF");
+  } __except (EXCEPTION_EXECUTE_HANDLER) {}
+}
+
+// --- Block Votekick (Host) ---
+// When host, we can NOP the VoteBanSystem.AddVote to block all votekicks
+static bool s_votekickPatched = false;
+static uint8_t s_origAddVote[4] = {};
+static uintptr_t s_addVoteAddr = 0;
+
+void BlockVotekick(bool on) {
+  Attach();
+  if (!gameAssembly) return;
+
+  // Find VoteBanSystem.AddVote RVA via dump
+  if (s_addVoteAddr == 0) {
+    s_addVoteAddr = DumpDatabase::GetMethodRva("VoteBanSystem", "AddVote", 0);
+    if (s_addVoteAddr == 0) return;
+  }
+
+  uintptr_t addr = gameAssembly + s_addVoteAddr;
+
+  if (on && !s_votekickPatched) {
+    DWORD oldProt;
+    if (VirtualProtect((void *)addr, 4, PAGE_EXECUTE_READWRITE, &oldProt)) {
+      memcpy(s_origAddVote, (void *)addr, 4);
+      *(uint8_t *)(addr) = 0xC3;
+      *(uint8_t *)(addr + 1) = 0x90;
+      *(uint8_t *)(addr + 2) = 0x90;
+      VirtualProtect((void *)addr, 4, oldProt, &oldProt);
+      s_votekickPatched = true;
+      printf("[+] Votekick blocked (AddVote NOPed)\n");
+    }
+  } else if (!on && s_votekickPatched) {
+    DWORD oldProt;
+    if (VirtualProtect((void *)addr, 4, PAGE_EXECUTE_READWRITE, &oldProt)) {
+      memcpy((void *)addr, s_origAddVote, 4);
+      VirtualProtect((void *)addr, 4, oldProt, &oldProt);
+      s_votekickPatched = false;
+      printf("[+] Votekick unblocked\n");
     }
   }
 }

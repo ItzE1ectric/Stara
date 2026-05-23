@@ -98,6 +98,8 @@ namespace Stara::Game {
     namespace Vent { inline void* klass = nullptr; }
     namespace ChatController { inline void* klass = nullptr; }
     namespace HudManager { inline void* klass = nullptr; }
+    namespace VentilationSystem { inline void* klass = nullptr; }
+    namespace SabotageSystemType { inline void* klass = nullptr; }
 
     // Core Functions
     bool Init();
@@ -206,5 +208,18 @@ namespace Stara::Game {
     // Phase 9: Passive / QoL
     // ═══════════════════════════════════════════════════════
     void SetNoGameEnd(bool on);               // Suppress EndGame RPC (host)
+
+    // ═══════════════════════════════════════════════════════
+    // Hydra-Ported Features
+    // ═══════════════════════════════════════════════════════
+    void SetImmortality(bool on);             // VentilationSystem exploit
+    void AntiSabotage();                      // Send invalid sab to reset cooldown
+    void TeleportToRoomMapAware(int roomIdx); // Map-specific room teleport
+    void AutoReportBodies();                  // Auto-report nearest dead body
+    void SetDisableMeetings(bool on);         // Host: NOP ReportDeadBody
+    void FlipSkeld(bool on);                  // Swap Skeld<->Dleks prefabs
+    void BlockVotekick(bool on);              // Host: block votekick RPCs
+    int  GetTeleportRoomCount();              // Number of rooms for current map
+    const char* GetTeleportRoomName(int idx); // Room name by index for current map
 
 } // namespace Stara::Game

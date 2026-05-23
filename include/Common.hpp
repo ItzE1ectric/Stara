@@ -69,6 +69,7 @@ enum class Tab {
   Visuals,
   ESP,
   Movement,
+  AutoFarm,
   Fun,
   Troll,
   Cosmetics,
@@ -77,8 +78,9 @@ enum class Tab {
 };
 inline const char *TabName(Tab t) {
   constexpr const char *n[] = {"Dashboard", "Player",    "Visuals",
-                               "ESP",       "Movement",  "Fun",
-                               "Troll",     "Cosmetics", "Settings"};
+                               "ESP",       "Movement",  "Auto Farm",
+                               "Fun",       "Troll",     "Cosmetics",
+                               "Settings"};
   return n[(int)t];
 }
 
@@ -115,6 +117,7 @@ extern bool g_noclip, g_chatSpam, g_devMode, g_fpsDisp, g_rgbAccent;
 extern float g_accentCol[4], g_playerCol[4];
 extern char g_nameBuf[64];
 extern int g_hat, g_pet, g_skin, g_trail, g_emote, g_rarity;
+extern bool g_autoFarm;
 
 // New feature toggles
 extern bool g_noKillCd, g_infiniteEmergencies, g_alwaysMoveable,
@@ -149,5 +152,13 @@ extern bool g_panicMode, g_stealthMode;                 // Phase 7: Panic/Stealt
 extern bool g_minimapEsp;                               // Phase 8: Minimap
 extern bool g_invertControls, g_noGameEnd;              // Phase 9: QoL
 extern bool g_distanceTracers, g_freeCosmetics;         // Phase 9: QoL
+
+// Hydra-Ported Feature Toggles
+extern bool g_immortality;                              // VentilationSystem exploit
+extern bool g_antiSabotage;                             // Non-host sabotage block
+extern bool g_autoReport;                               // Auto report bodies
+extern bool g_disableMeetings;                          // Host: block meetings
+extern bool g_flippedSkeld;                             // Swap Skeld<->Dleks
+extern bool g_blockVotekick;                            // Host: block votekicks
 
 } // namespace Stara
