@@ -42,6 +42,11 @@ static std::string g_dumpPinnedClass;
 static int g_lastEspPreset = -1;
 static int g_lastVisualPreset = -1;
 static char g_tabSearch[48] = "";
+static char g_trackerSearch[72] = "";
+static bool g_trackerShowDead = true;
+static bool g_trackerOnlyImpostors = false;
+static int g_trackerSelectedPid = -1;
+static int g_trackerRolePick = 0;
 
 struct UiToast {
   std::string text;
@@ -412,6 +417,8 @@ static const char *TabTag(Tab t) {
     return "VS";
   case Tab::ESP:
     return "ES";
+  case Tab::PlayerTracker:
+    return "TK";
   case Tab::Movement:
     return "MV";
   case Tab::AutoFarm:
@@ -439,6 +446,8 @@ static const char *TabSubtitle(Tab t) {
     return "Rendering style, camera tuning, visual presets";
   case Tab::ESP:
     return "Player overlays, role markers, and diagnostics";
+  case Tab::PlayerTracker:
+    return "Live roster tracking, target actions, and role utilities";
   case Tab::Movement:
     return "Speed, pathing, and teleport utilities";
   case Tab::AutoFarm:
@@ -466,6 +475,8 @@ static const char *TabSidebarHint(Tab t) {
     return "rendering";
   case Tab::ESP:
     return "overlay";
+  case Tab::PlayerTracker:
+    return "tracker";
   case Tab::Movement:
     return "mobility";
   case Tab::AutoFarm:
@@ -493,6 +504,8 @@ static ImU32 TabTone(Tab t, int alpha = 255) {
     return IM_COL32(120, 196, 255, alpha);
   case Tab::ESP:
     return IM_COL32(72, 232, 255, alpha);
+  case Tab::PlayerTracker:
+    return IM_COL32(255, 186, 120, alpha);
   case Tab::Movement:
     return IM_COL32(120, 220, 140, alpha);
   case Tab::AutoFarm:
@@ -546,6 +559,21 @@ static void DrawTabGlyph(ImDrawList *dl, Tab t, ImVec2 center, float size,
                 {center.x, center.y - s * 0.32f}, col, thickness);
     dl->AddLine({center.x, center.y + s * 0.32f},
                 {center.x, center.y + s * 0.8f}, col, thickness);
+    break;
+  case Tab::PlayerTracker:
+    dl->AddRect({center.x - s * 0.78f, center.y - s * 0.56f},
+                {center.x + s * 0.78f, center.y + s * 0.56f}, col, 3.f, 0,
+                thickness);
+    dl->AddCircle({center.x - s * 0.24f, center.y - s * 0.05f}, s * 0.18f, col,
+                  14, thickness);
+    dl->AddLine({center.x - s * 0.42f, center.y + s * 0.34f},
+                {center.x - s * 0.06f, center.y + s * 0.34f}, col, thickness);
+    dl->AddLine({center.x + s * 0.1f, center.y - s * 0.32f},
+                {center.x + s * 0.52f, center.y - s * 0.32f}, col, thickness);
+    dl->AddLine({center.x + s * 0.1f, center.y},
+                {center.x + s * 0.52f, center.y}, col, thickness);
+    dl->AddLine({center.x + s * 0.1f, center.y + s * 0.32f},
+                {center.x + s * 0.52f, center.y + s * 0.32f}, col, thickness);
     break;
   case Tab::Movement: {
     ImVec2 pts[4] = {{center.x - s * 0.85f, center.y + s * 0.65f},
@@ -1700,6 +1728,176 @@ static void TabESP() {
   EndCard();
 }
 
+static void TabPlayerTracker() {
+  bool inSession = Game::isInGame || Game::isInLobby;
+  bool inGame = Game::isInGame;
+  const auto &players = Game::players;
+
+  Card("Tracker Overview");
+  int aliveCount = 0, deadCount = 0, impCount = 0;
+  for (const auto &p : players) {
+    if (p.isDead)
+      deadCount++;
+    else
+      aliveCount++;
+    if (p.isImpostor)
+      impCount++;
+  }
+  ImGui::TextColored({0.74f, 0.82f, 0.95f, 1.f}, "State:");
+  ImGui::SameLine();
+  ImGui::TextColored({1.f, 1.f, 1.f, 1.f}, "%s",
+                     inGame ? "In Game"
+                            : (inSession ? "In Lobby" : "Disconnected"));
+  ImGui::Text("Players: %d | Alive: %d | Dead: %d | Impostors: %d",
+              (int)players.size(), aliveCount, deadCount, impCount);
+  if (!inSession)
+    ImGui::TextColored({1.f, 0.55f, 0.45f, 1.f},
+                       "Join a lobby/game to populate tracker data.");
+  EndCard();
+
+  Card("Roster Filters");
+  ImGui::InputTextWithHint("##trackerSearch", "Search name, role, pid, cid",
+                           g_trackerSearch, (int)std::size(g_trackerSearch));
+  Toggle("Show Dead Players", &g_trackerShowDead);
+  Toggle("Impostors Only", &g_trackerOnlyImpostors);
+  if (GlowBtn("Clear Filters", {120, 26})) {
+    g_trackerSearch[0] = '\0';
+    g_trackerShowDead = true;
+    g_trackerOnlyImpostors = false;
+  }
+  EndCard();
+
+  Card("Live Player Table");
+  if (!inSession) {
+    ImGui::TextColored({0.7f, 0.7f, 0.8f, 1.f}, "No active session.");
+  } else if (players.empty()) {
+    ImGui::TextColored({0.7f, 0.7f, 0.8f, 1.f}, "Waiting for player data...");
+  } else if (ImGui::BeginTable("PlayerTrackerTable", 7,
+                                ImGuiTableFlags_Borders |
+                                    ImGuiTableFlags_RowBg |
+                                    ImGuiTableFlags_SizingStretchProp)) {
+    ImGui::TableSetupColumn("Name");
+    ImGui::TableSetupColumn("Role");
+    ImGui::TableSetupColumn("PID", ImGuiTableColumnFlags_WidthFixed, 52.f);
+    ImGui::TableSetupColumn("CID", ImGuiTableColumnFlags_WidthFixed, 52.f);
+    ImGui::TableSetupColumn("State", ImGuiTableColumnFlags_WidthFixed, 74.f);
+    ImGui::TableSetupColumn("Dist", ImGuiTableColumnFlags_WidthFixed, 66.f);
+    ImGui::TableSetupColumn("Select", ImGuiTableColumnFlags_WidthFixed, 74.f);
+    ImGui::TableHeadersRow();
+
+    std::string search = g_trackerSearch;
+    for (const auto &p : players) {
+      if (!g_trackerShowDead && p.isDead)
+        continue;
+      if (g_trackerOnlyImpostors && !p.isImpostor)
+        continue;
+
+      std::string pid = std::to_string(p.playerId);
+      std::string cid = std::to_string(p.clientId);
+      std::string state = p.isDead ? "Dead" : (p.isImpostor ? "Imp" : "Crew");
+      if (!search.empty() && !ContainsNoCase(p.name, search) &&
+          !ContainsNoCase(p.roleName, search) && !ContainsNoCase(pid, search) &&
+          !ContainsNoCase(cid, search) && !ContainsNoCase(state, search))
+        continue;
+
+      bool selected = (g_trackerSelectedPid == p.playerId);
+      char distBuf[24] = "N/A";
+      if (p.distance >= 0.f)
+        snprintf(distBuf, sizeof(distBuf), "%.1fm", p.distance);
+
+      ImGui::TableNextRow();
+      ImGui::TableNextColumn();
+      if (selected)
+        ImGui::TextColored({1.f, 0.88f, 0.52f, 1.f}, "%s", p.name.c_str());
+      else if (p.isImpostor)
+        ImGui::TextColored({1.f, 0.4f, 0.4f, 1.f}, "%s", p.name.c_str());
+      else
+        ImGui::Text("%s", p.name.c_str());
+
+      ImGui::TableNextColumn();
+      ImGui::Text("%s", p.roleName.c_str());
+      ImGui::TableNextColumn();
+      ImGui::Text("%s", pid.c_str());
+      ImGui::TableNextColumn();
+      ImGui::Text("%s", cid.c_str());
+      ImGui::TableNextColumn();
+      ImGui::Text("%s", state.c_str());
+      ImGui::TableNextColumn();
+      ImGui::Text("%s", distBuf);
+      ImGui::TableNextColumn();
+      ImGui::PushID(p.playerId + 9000);
+      if (GlowBtn(selected ? "Selected" : "Select", {68, 22}))
+        g_trackerSelectedPid = p.playerId;
+      ImGui::PopID();
+    }
+    ImGui::EndTable();
+  }
+  EndCard();
+
+  const Game::PlayerInfo *target = nullptr;
+  for (const auto &p : players) {
+    if (p.playerId == g_trackerSelectedPid) {
+      target = &p;
+      break;
+    }
+  }
+  if (!target && !players.empty() && g_trackerSelectedPid >= 0)
+    g_trackerSelectedPid = -1;
+
+  Card("Target Actions");
+  if (!target) {
+    ImGui::TextColored({0.7f, 0.7f, 0.8f, 1.f},
+                       "Select a player from the tracker table.");
+  } else {
+    ImGui::TextColored({0.74f, 0.82f, 0.95f, 1.f}, "Target:");
+    ImGui::SameLine();
+    ImGui::Text("%s (PID %d, CID %d)", target->name.c_str(), target->playerId,
+                target->clientId);
+    ImGui::Text("Role: %s | Status: %s", target->roleName.c_str(),
+                target->isDead ? "Dead" : "Alive");
+
+    if (!inGame)
+      ImGui::BeginDisabled();
+    if (GlowBtn("Teleport To Target", {170, 28}))
+      Game::TeleportToPlayer(target->playerId);
+    ImGui::SameLine();
+    if (GlowBtn("Spectate Target", {160, 28})) {
+      g_freecam = false;
+      g_spectate = true;
+      g_spectateTarget = target->playerId;
+    }
+    if (GlowBtn("Report Target Body", {170, 28}))
+      Game::ReportBody(target->playerId);
+    ImGui::SameLine();
+    if (GlowBtn("Protect Target", {150, 28}))
+      Game::ProtectPlayer(target->playerId);
+    if (GlowBtn("Shapeshift -> Target", {170, 28}))
+      Game::ShapeshiftTo(target->playerId);
+    ImGui::SameLine();
+    if (GlowBtn("Eliminate Target", {150, 28}))
+      Game::KillPlayer(target->playerId);
+    if (!inGame)
+      ImGui::EndDisabled();
+    if (!inGame)
+      ImGui::TextColored({0.9f, 0.74f, 0.45f, 1.f},
+                         "Action buttons require an active match.");
+
+    const char *roles[] = {"Crewmate",       "Impostor",       "Scientist",
+                           "Engineer",       "Guardian Angel", "Shapeshifter",
+                           "Crewmate Ghost", "Impostor Ghost", "Noisemaker",
+                           "Phantom",        "Tracker",        "Detective",
+                           "Viper"};
+    const int roleIds[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 18};
+    ImGui::SetNextItemWidth(220.f);
+    ImGui::Combo("Force Role##trackerRole", &g_trackerRolePick, roles, 13);
+    if (GlowBtn("Apply Role To Target", {170, 28}))
+      Game::SetPlayerRole(target->playerId, roleIds[g_trackerRolePick]);
+    ImGui::TextColored({0.63f, 0.75f, 0.9f, 1.f},
+                       "Role forcing works best with host authority.");
+  }
+  EndCard();
+}
+
 static void TabMovement() {
   Card("Movement");
   if (Game::isInGame) {
@@ -1729,6 +1927,9 @@ static void TabMovement() {
 }
 
 static void TabAutoFarm() {
+  bool inGame = Game::isInGame;
+  bool inSession = Game::isInGame || Game::isInLobby;
+
   Card("Automation Core");
   Toggle("Lobby Auto Farm (Rejoin if Kicked)", &g_autoFarm);
   Toggle("Auto Complete Tasks", &g_autoTasks);
@@ -1736,6 +1937,8 @@ static void TabAutoFarm() {
   Toggle("Auto Path Loop", &g_autoPath);
   Toggle("Auto Spam Chat", &g_chatSpam);
   Toggle("Always Chat (Bypass Phase)", &g_alwaysChat);
+  ImGui::TextColored({0.7f, 0.78f, 0.9f, 1.f}, "State: %s",
+                     inGame ? "In Game" : (inSession ? "In Lobby" : "Disconnected"));
   if (g_autoFarm)
     ImGui::TextColored({0.5f, 0.95f, 0.6f, 1.f},
                        "Auto Farm active: if kicked, it will auto-find a new "
@@ -1746,12 +1949,19 @@ static void TabAutoFarm() {
   EndCard();
 
   Card("Task Farming");
+  if (!inGame)
+    ImGui::BeginDisabled();
   if (GlowBtn("Complete All Tasks Now", {220, 30})) {
     Game::CompleteAllTasks();
     PushToast("Task farm pulse sent", IM_COL32(120, 205, 255, 245), 1.8f);
   }
   if (GlowBtn("Emergency Meeting Pulse", {220, 30}))
     Game::ForceEmergencyMeeting();
+  if (!inGame)
+    ImGui::EndDisabled();
+  if (!inGame)
+    ImGui::TextColored({0.9f, 0.75f, 0.45f, 1.f},
+                       "Task actions require an active match.");
   EndCard();
 
   Card("Protection & Utility");
@@ -2367,6 +2577,7 @@ static void TabSettings() {
     g_autoTasks = false; g_antiKick = false; g_forceProtect = false;
     g_freezeAll = false; g_rainbow = false; g_spin = false; g_dance = false;
     g_chatSpam = false; g_colorCycle = false; g_spamAnim = false;
+    g_autoFarm = false;
     g_autoPath = false; g_walkInVents = false; g_useVents = false;
     g_seeGhosts = false; g_alwaysChat = false; g_killReach = false;
     g_unfixableLights = false; g_moonwalk = false; g_medScan = false;
@@ -2772,6 +2983,9 @@ void RenderMenu() {
       break;
     case Tab::ESP:
       TabESP();
+      break;
+    case Tab::PlayerTracker:
+      TabPlayerTracker();
       break;
     case Tab::Movement:
       TabMovement();

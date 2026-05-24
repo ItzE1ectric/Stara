@@ -68,6 +68,7 @@ enum class Tab {
   Player,
   Visuals,
   ESP,
+  PlayerTracker,
   Movement,
   AutoFarm,
   Fun,
@@ -78,9 +79,9 @@ enum class Tab {
 };
 inline const char *TabName(Tab t) {
   constexpr const char *n[] = {"Dashboard", "Player",    "Visuals",
-                               "ESP",       "Movement",  "Auto Farm",
-                               "Fun",       "Troll",     "Cosmetics",
-                               "Settings"};
+                               "ESP",       "Tracker",   "Movement",
+                               "Auto Farm", "Fun",       "Troll",
+                               "Cosmetics", "Settings"};
   return n[(int)t];
 }
 

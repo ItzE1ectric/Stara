@@ -117,6 +117,8 @@ static uintptr_t g_rvaRpcShapeshift = 0x5C9ED0;
 static uintptr_t g_rvaRpcVanish = 0x5CA3E0;
 static uintptr_t g_rvaRpcAppear = 0x5C8BA0;
 static uintptr_t g_rvaMonoStartCoroutineString = 0x1F4C290;
+static uintptr_t g_rvaMonoStartCoroutineIEnumerator = 0x1F4C1B0;
+static uintptr_t g_rvaAmongUsClientCoFindGame = 0x5462D0;
 static uintptr_t g_rvaRpcEnterVent = 0x5E3250;
 static uintptr_t g_rvaRpcExitVent = 0x5E3340;
 static uintptr_t g_rvaRpcCloseDoorsOfType = 0x637E00;
@@ -199,6 +201,8 @@ static void ResolveRvasFromDump() {
       GetMethodRva("PlayerControl", "RpcShapeshift", g_rvaRpcShapeshift);
   g_rvaRpcVanish = GetMethodRva("PlayerControl", "RpcVanish", g_rvaRpcVanish);
   g_rvaRpcAppear = GetMethodRva("PlayerControl", "RpcAppear", g_rvaRpcAppear);
+  g_rvaAmongUsClientCoFindGame =
+      GetMethodRva("AmongUsClient", "CoFindGame", g_rvaAmongUsClientCoFindGame);
   g_rvaMonoStartCoroutineString = GetMethodRva(
       "MonoBehaviour", "StartCoroutine", g_rvaMonoStartCoroutineString);
   g_rvaRpcEnterVent =
@@ -436,24 +440,42 @@ static void *GetAmongUsClientInstance() {
 }
 
 typedef void *(__cdecl *StartCoroutineString_fn)(void *, void *, void *);
+typedef void *(__cdecl *StartCoroutineIEnumerator_fn)(void *, void *, void *);
+typedef void *(__cdecl *CoFindGame_fn)(void *, void *);
 
 static bool StartAutoFindLobbyCoroutine() {
-  if (!gameAssembly || !il2cpp_string_new || !g_rvaMonoStartCoroutineString)
+  if (!gameAssembly)
     return false;
 
   void *inst = GetAmongUsClientInstance();
   if (!IsValid(inst))
     return false;
 
+  // Preferred path: call CoFindGame() directly and start its IEnumerator.
+  __try {
+    auto coFind = (CoFindGame_fn)(gameAssembly + g_rvaAmongUsClientCoFindGame);
+    auto startEnum = (StartCoroutineIEnumerator_fn)(
+        gameAssembly + g_rvaMonoStartCoroutineIEnumerator);
+    if (coFind && startEnum) {
+      void *enumerator = coFind(inst, nullptr);
+      if (IsValid(enumerator)) {
+        startEnum(inst, enumerator, nullptr);
+        return true;
+      }
+    }
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
+
+  // Fallback path: StartCoroutine("CoFindGame")
+  if (!il2cpp_string_new || !g_rvaMonoStartCoroutineString)
+    return false;
   auto startCoroutine =
       (StartCoroutineString_fn)(gameAssembly + g_rvaMonoStartCoroutineString);
   if (!startCoroutine)
     return false;
-
   void *coName = il2cpp_string_new("CoFindGame");
   if (!IsValid(coName))
     return false;
-
   __try {
     startCoroutine(inst, coName, nullptr);
     return true;
@@ -466,11 +488,13 @@ static void AutoFarmTick(float now, bool hasClient, int gameState,
                          int lastDisconnectReason) {
   static bool wasEnabled = false;
   static bool wasInSession = false;
+  static bool kickRejoinArmed = false;
   static float nextJoinAttemptAt = 0.f;
 
   if (!g_autoFarm) {
     wasEnabled = false;
     wasInSession = (isInGame || isInLobby);
+    kickRejoinArmed = false;
     nextJoinAttemptAt = 0.f;
     return;
   }
@@ -478,30 +502,34 @@ static void AutoFarmTick(float now, bool hasClient, int gameState,
   bool inSession = (isInGame || isInLobby);
   if (!wasEnabled) {
     wasEnabled = true;
-    nextJoinAttemptAt = now + 0.4f;
+    nextJoinAttemptAt = now + 0.8f;
     printf("[+] Auto Farm enabled\n");
   }
 
-  // Transitioned out of an active session.
-  if (wasInSession && !inSession) {
-    if (lastDisconnectReason == 7) { // DisconnectReasons.Kicked
-      nextJoinAttemptAt = now + 1.5f;
-      printf("[!] Auto Farm: kick detected, searching new lobby...\n");
-    } else {
-      nextJoinAttemptAt = now + 4.0f;
-    }
+  // DisconnectReasons.Kicked
+  if (lastDisconnectReason == 7) {
+    if (!kickRejoinArmed)
+      printf("[!] Auto Farm: kick detected, arming rejoin\n");
+    kickRejoinArmed = true;
   }
 
-  // Game ended: lobby can be destroyed depending on host; prepare a slower retry.
-  if (gameState == 3 && !inSession)
-    nextJoinAttemptAt = std::max(nextJoinAttemptAt, now + 3.0f);
+  // Leaving a session means we should eventually search again.
+  if (wasInSession && !inSession) {
+    nextJoinAttemptAt = std::max(nextJoinAttemptAt, now + 1.2f);
+  }
 
-  if (!inSession && hasClient && now >= nextJoinAttemptAt) {
+  // Game ended/disconnected and we're not in a lobby/game anymore.
+  if ((gameState == 3 || gameState == 0) && !inSession)
+    nextJoinAttemptAt = std::max(nextJoinAttemptAt, now + 1.6f);
+
+  bool shouldRejoin = !inSession && (kickRejoinArmed || gameState == 0 || gameState == 3);
+  if (shouldRejoin && hasClient && now >= nextJoinAttemptAt) {
     if (StartAutoFindLobbyCoroutine()) {
-      nextJoinAttemptAt = now + 8.0f;
-      printf("[*] Auto Farm: running CoFindGame...\n");
+      kickRejoinArmed = false;
+      nextJoinAttemptAt = now + 9.0f;
+      printf("[*] Auto Farm: find-game coroutine dispatched\n");
     } else {
-      nextJoinAttemptAt = now + 3.5f;
+      nextJoinAttemptAt = now + 2.5f;
     }
   }
 
@@ -1970,8 +1998,59 @@ static void UpdateCameraState() {
   }
 }
 
+// Prefer Unity's own projection so ESP stays aligned at any zoom/aspect ratio.
+static bool TryWorldToScreenUnity(float wx, float wy, ImVec2 &out) {
+  if (!gameAssembly || !il2cpp_class_get_method_from_name || !il2cpp_runtime_invoke)
+    return false;
+
+  typedef void *(__cdecl *GetMainCamera_fn)(void *);
+  auto getMain = (GetMainCamera_fn)(gameAssembly + g_rvaCameraGetMain);
+  if (!getMain)
+    return false;
+
+  void *cam = getMain(nullptr);
+  if (!IsValid(cam))
+    return false;
+
+  static void *worldToScreen_method = nullptr;
+  static void *cachedCamKlass = nullptr;
+  void *camKlass = *(void **)cam;
+  if (camKlass != cachedCamKlass) {
+    cachedCamKlass = camKlass;
+    worldToScreen_method = nullptr;
+  }
+  if (!worldToScreen_method && IsValid(camKlass))
+    worldToScreen_method =
+        il2cpp_class_get_method_from_name(camKlass, "WorldToScreenPoint", 1);
+  if (!worldToScreen_method)
+    return false;
+
+  struct Vec3 {
+    float x, y, z;
+  } world = {wx, wy, 0.f};
+  void *args[1] = {&world};
+  void *exc = nullptr;
+  void *screenBox = il2cpp_runtime_invoke(worldToScreen_method, cam, args, &exc);
+  if (exc || !IsValid(screenBox))
+    return false;
+
+  float *xyz = (float *)((uintptr_t)screenBox + sizeof(void *) * 2);
+  float sx = xyz[0], sy = xyz[1], sz = xyz[2];
+  if (!std::isfinite(sx) || !std::isfinite(sy) || !std::isfinite(sz) || sz < -0.01f)
+    return false;
+
+  float screenH = ImGui::GetIO().DisplaySize.y;
+  out = {sx, screenH - sy}; // Unity uses bottom-left origin, ImGui uses top-left.
+  return std::isfinite(out.x) && std::isfinite(out.y);
+}
+
 // World-to-screen for orthographic 2D camera
 static ImVec2 WorldToScreen(float wx, float wy) {
+  ImVec2 out = {};
+  if (TryWorldToScreenUnity(wx, wy, out))
+    return out;
+
+  // Fallback for older builds where WorldToScreenPoint isn't callable.
   float screenW = ImGui::GetIO().DisplaySize.x;
   float screenH = ImGui::GetIO().DisplaySize.y;
   float ppu = screenH / (2.f * orthoSize); // pixels per world unit
@@ -1988,14 +2067,25 @@ void DrawESP(ImDrawList *drawList) {
   float screenW = ImGui::GetIO().DisplaySize.x;
   float screenH = ImGui::GetIO().DisplaySize.y;
   float ppu = screenH / (2.f * orthoSize);
-  // Box size scaled to camera zoom
-  float boxW = 0.5f * ppu; // ~0.5 world units wide
-  float boxH = 0.8f * ppu; // ~0.8 world units tall
+  const float kHeadOffsetWU = 0.62f;
+  const float kFeetOffsetWU = -0.24f;
 
   for (const auto &p : players) {
     if (!p.hasWorldPos)
       continue;
+
     ImVec2 sp = WorldToScreen(p.x, p.y);
+    ImVec2 spHead = WorldToScreen(p.x, p.y + kHeadOffsetWU);
+    ImVec2 spFeet = WorldToScreen(p.x, p.y + kFeetOffsetWU);
+
+    float topY = std::min(spHead.y, spFeet.y) - 1.f;
+    float bottomY = std::max(spHead.y, spFeet.y) + 1.f;
+    float boxH = bottomY - topY;
+    if (!std::isfinite(boxH) || boxH < 8.f)
+      boxH = 0.95f * ppu;
+    float boxW = std::clamp(boxH * 0.42f, 8.f, 0.95f * ppu);
+    float centerY = (topY + bottomY) * 0.5f;
+
     // Cull offscreen
     if (sp.x < -200 || sp.x > screenW + 200 || sp.y < -200 ||
         sp.y > screenH + 200)
@@ -2008,15 +2098,15 @@ void DrawESP(ImDrawList *drawList) {
 
     if (g_espBox) {
       // Shadow
-      drawList->AddRect({sp.x - boxW - 1, sp.y - boxH - 1},
-                        {sp.x + boxW + 1, sp.y + boxH * 0.1f + 1},
+      drawList->AddRect({sp.x - boxW - 1, topY - 1},
+                        {sp.x + boxW + 1, bottomY + 1},
                         IM_COL32(0, 0, 0, 150), 3.f, 0, 1.5f);
       // Main box
-      drawList->AddRect({sp.x - boxW, sp.y - boxH},
-                        {sp.x + boxW, sp.y + boxH * 0.1f}, col, 3.f, 0, 2.0f);
+      drawList->AddRect({sp.x - boxW, topY}, {sp.x + boxW, bottomY}, col, 3.f, 0,
+                        2.0f);
     }
 
-    float textY = sp.y - boxH - 16;
+    float textY = topY - 16;
     if (g_espName) {
       std::string dn = p.name;
       if (p.isDead)
@@ -2031,24 +2121,24 @@ void DrawESP(ImDrawList *drawList) {
       char dbuf[16];
       snprintf(dbuf, sizeof(dbuf), "%.1fm", p.distance);
       ImVec2 sz = ImGui::CalcTextSize(dbuf);
-      drawList->AddText({sp.x - sz.x / 2, sp.y + boxH * 0.1f + 4},
+      drawList->AddText({sp.x - sz.x / 2, bottomY + 4},
                         IM_COL32(200, 200, 200, 200), dbuf);
     }
     if (g_espRole) {
       ImVec2 sz = ImGui::CalcTextSize(p.roleName.c_str());
       ImU32 rc = p.isImpostor ? IM_COL32(255, 80, 80, 255)
                               : IM_COL32(100, 255, 100, 255);
-      drawList->AddText({sp.x - sz.x / 2, sp.y + boxH * 0.1f + 18}, rc,
+      drawList->AddText({sp.x - sz.x / 2, bottomY + 18}, rc,
                         p.roleName.c_str());
     }
     if (g_espTask) {
       const char *taskTag = p.isDead ? "X" : "T";
       ImU32 tc =
           p.isDead ? IM_COL32(140, 140, 140, 220) : IM_COL32(255, 220, 90, 230);
-      drawList->AddCircleFilled({sp.x + boxW + 9.f, sp.y - boxH + 7.f}, 6.f, tc,
+      drawList->AddCircleFilled({sp.x + boxW + 9.f, topY + 7.f}, 6.f, tc,
                                 14);
       ImVec2 ts = ImGui::CalcTextSize(taskTag);
-      drawList->AddText({sp.x + boxW + 9.f - ts.x * 0.5f, sp.y - boxH + 2.f},
+      drawList->AddText({sp.x + boxW + 9.f - ts.x * 0.5f, topY + 2.f},
                         IM_COL32(15, 15, 15, 230), taskTag);
     }
     if (g_particle) {
@@ -2056,7 +2146,7 @@ void DrawESP(ImDrawList *drawList) {
       for (int k = 0; k < 5; k++) {
         float a = t * 2.2f + k * (6.283185f / 5.f);
         float r = 9.f + 3.f * sinf(t * 3.7f + k);
-        ImVec2 pp = {sp.x + cosf(a) * r, sp.y - boxH * 0.45f + sinf(a) * r};
+        ImVec2 pp = {sp.x + cosf(a) * r, centerY + sinf(a) * r};
         drawList->AddCircleFilled(pp, 1.6f, IM_COL32(135, 235, 255, 170), 8);
       }
     }
@@ -2109,7 +2199,9 @@ void DrawESP(ImDrawList *drawList) {
       }
       if (drawTracer) {
         ImVec2 bot = {screenW / 2.f, screenH};
-        drawList->AddLine(bot, {sp.x, sp.y}, (tracerCol & 0x00FFFFFF) | 0xA0000000, 1.2f);
+        ImVec2 target = {sp.x, topY + boxH * 0.55f};
+        drawList->AddLine(bot, target, (tracerCol & 0x00FFFFFF) | 0xA0000000,
+                          1.2f);
       }
     }
   }
@@ -3540,7 +3632,6 @@ void PanicDisableAll() {
 // ═══════════════════════════════════════════════════════════════════════
 
 // No Game End: patch LogicGameFlowNormal.CheckEndCriteria to NOP
-static bool s_noGameEndPatched = false;
 static uint8_t s_origCheckEndCriteria[4] = {};
 
 void SetNoGameEnd(bool on) {
@@ -3581,7 +3672,6 @@ void SetNoGameEnd(bool on) {
 // Tricks the server into thinking we're inside a vent (ID 50, which doesn't exist)
 // Server-side kill checks fail because it thinks we're venting
 typedef void(__cdecl *VentSystemUpdate_fn)(int op, int ventId, void *method);
-static bool s_immortalityActive = false;
 
 void SetImmortality(bool on) {
   Attach();
@@ -3749,7 +3839,6 @@ void AutoReportBodies() {
 
 // --- Disable Meetings (Host) ---
 // NOPs the ReportDeadBody function so meetings can never be called
-static bool s_meetingsPatched = false;
 static uint8_t s_origReportDeadBody[4] = {};
 
 void SetDisableMeetings(bool on) {
@@ -3813,7 +3902,6 @@ void FlipSkeld(bool on) {
 
 // --- Block Votekick (Host) ---
 // When host, we can NOP the VoteBanSystem.AddVote to block all votekicks
-static bool s_votekickPatched = false;
 static uint8_t s_origAddVote[4] = {};
 static uintptr_t s_addVoteAddr = 0;
 
